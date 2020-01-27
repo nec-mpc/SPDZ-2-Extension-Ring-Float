@@ -7,7 +7,7 @@ By using the Software, you agree that you have read, understood, and comply with
 Subject to the terms and conditions set forth in this License, NEC Corporation ("NEC") hereby grants to you a non-exclusive, non-transferable license to use, copy and modify nec-mpc/SPDZ-2-Extension-Ring (URL: https://github.com/nec-mpc/SPDZ-2-Extension-Ring) and related documents ("Software") solely for non-commercial, internal testing and verification of NEC's technologies described in Report number: Cryptology ePrint Archive: Report 2018/762, Title: Generalizing the SPDZ Compiler For Other Protocols published at ACM Conference on Computer and Communications Security in 2018. 
 URL: https://eprint.iacr.org/2018/762
 
-Bug reports, test results, usability, modifications and other feedback with respect to the Software is welcome and appreciated. Please contact : t-araki@ek.jp.nec.com                  
+Bug reports, test results, usability, modifications and other feedback with respect to the Software is welcome and appreciated. Please contact : toshinori_araki@nec.com                  
 NEC may use such feedback for any purposes and by any means.
 
 You shall not use or incorporate any part of the Software (including its copies and modifications) or an algorithm included in the Software in a commercial product or service, and shall not use them for any other purpose than granted in this License.
