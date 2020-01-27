@@ -9,123 +9,68 @@ using namespace std;
 template <typename T>
 class Z2nShareReplicated {
  private:
-  static const unsigned int n = 32; // tentative for debug
-  uint32_t numOfShares;
 
  public:
-  T *elem1;
-  T *elem2;
+  T elem1;
+  T elem2;
   
-  Z2nShareReplicated() {elem1=NULL; elem2=NULL; numOfShares=0;}
-  Z2nShareReplicated(uint32_t num) {
-    numOfShares = num;
-    elem1 = new T[numOfShares];
-    elem2 = new T[numOfShares];
-    memset(elem1,0,numOfShares*sizeof(T));
-    memset(elem2,0,numOfShares*sizeof(T));
-  }
+  Z2nShareReplicated() {elem1=0; elem2=0;}
 
-  uint32_t getNumOfShares() {return numOfShares;}
-
-  void init(uint32_t num) {
-    if ((elem1 != NULL) || (elem2!= NULL))
-      {
-	cout << "[Z2nShareReplicated] init failed: already allocated"<< endl;
-	exit(1);
-      }
-    numOfShares = num;
-    elem1 = new T[numOfShares];
-    elem2 = new T[numOfShares];
-    memset(elem1, 0, numOfShares*sizeof(T));
-    memset(elem2, 0, numOfShares*sizeof(T));
-  }
-
-  Z2nShareReplicated& operator=(const Z2nShareReplicated& other) {
-#pragma ivdep
-    if (numOfShares != other.numOfShares) {
-      cout << "[Z2nShareReplicated] operator= failed: sizes are different" << endl;
-      exit(1);
-    }
-    for (int i=0; i<numOfShares; i++) {
-      elem1[i] = other.elem1[i];
-      elem2[i] = other.elem2[i];
-    }
-    return *this;
+  Z2nShareReplicated& operator=(const Z2nShareReplicated& other)
+  {
+	  elem1 = other.elem1;
+	  elem2 = other.elem2;
+	  return *this;
   }
 
   bool operator !=(const Z2nShareReplicated& other) {
-    for (int i=0; i<numOfShares; i++) {
-      if (elem1[i] != other.elem1[i] || elem2[i] != other.elem2[i]) return false;
-    }
+    if (elem1 != other.elem1 || elem2 != other.elem2) return false;
     return true;
   }
 
   Z2nShareReplicated operator+(const Z2nShareReplicated& other) {
-    Z2nShareReplicated tmp(numOfShares);
-    tmp.numOfShares = numOfShares;
-#pragma ivdep
-    for (int i=0; i<numOfShares; i++) {
-      tmp.elem1[i] = elem1[i] + other.elem1[i];
-      tmp.elem2[i] = elem2[i] + other.elem2[i];
-    }
+    Z2nShareReplicated tmp;
+    tmp.elem1 = elem1 + other.elem1;
+    tmp.elem2 = elem2 + other.elem2;
     return tmp;
   }
 
 
   Z2nShareReplicated operator-(const Z2nShareReplicated& other) {
-    Z2nShareReplicated tmp(numOfShares);
-    tmp.numOfShares = numOfShares;
-#pragma ivdep
-    for (int i=0; i<numOfShares; i++) {
-      tmp.elem1[i] = elem1[i] - other.elem1[i];
-      tmp.elem2[i] = elem2[i] - other.elem2[i];
-    }
+    Z2nShareReplicated tmp;
+      tmp.elem1 = elem1 - other.elem1;
+      tmp.elem2 = elem2 - other.elem2;
     return tmp;
   }
 
   
   Z2nShareReplicated operator*(const Z2nShareReplicated& other) {
-    Z2nShareReplicated tmp(numOfShares);
-    tmp.numOfShares = numOfShares;
-#pragma ivdep
-    for (int i=0; i<numOfShares; i++) {
-      tmp.elem1[i] = elem1[i] * other.elem1[i];
-      tmp.elem2[i] = elem2[i] * other.elem2[i];
-    }
+    Z2nShareReplicated tmp;
+    tmp.elem1 = elem1 * other.elem1;
+    tmp.elem2 = elem2 * other.elem2;
     return tmp;
   }
 
   Z2nShareReplicated& operator+=(const Z2nShareReplicated& other) {
-#pragma ivdep    
-    for (int i=0; i<numOfShares; i++) {
-      elem1[i] = elem1[i] + other.elem1[i];
-      elem2[i] = elem2[i] + other.elem2[i];
-    }
+    elem1 = elem1 + other.elem1;
+    elem2 = elem2 + other.elem2;
     return *this;
   }
 
   Z2nShareReplicated& operator-=(const Z2nShareReplicated& other) {
-#pragma ivdep
-    for (int i=0; i<numOfShares; i++) {
-      elem1[i] = elem1[i] - other.elem1[i];
-      elem2[i] = elem2[i] - other.elem2[i];
-    }
-    return *this;
+	  elem1 = elem1 - other.elem1;
+	  elem2 = elem2 - other.elem2;
+	  return *this;
   }
 
   Z2nShareReplicated& operator*=(const Z2nShareReplicated& other) {
-#pragma ivdep
-    for (int i=0; i<numOfShares; i++) {
-      elem1[i] = elem1[i] * other.elem1[i];
-      elem2[i] = elem2[i] * other.elem2[i];
-    }
-    return *this;
+	  elem1 = elem1 * other.elem1;
+	  elem2 = elem2 * other.elem2;
+	  return *this;
   }
 
   void dump() {
-    for (int i=0; i<numOfShares; i++) {
-      cout << "i=" << i << ": " << elem1[i]<< ", " << elem2[i] <<endl;
-    }
+      cout <<  elem1<< ", " << elem2 << endl;
   }
 
 };

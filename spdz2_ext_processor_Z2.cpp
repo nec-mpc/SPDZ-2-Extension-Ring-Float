@@ -1,4 +1,9 @@
+#include "spdzext_width_defs.h"
 #include "spdz2_ext_processor_Z2.h"
+#include "Z2nIntReplicated.h"
+#include "Z2nShareReplicated.h"
+
+#include <log4cpp/Category.hh>
 
 #include <syslog.h>
 #include <math.h>
@@ -13,494 +18,619 @@ spdz2_ext_processor_Z2::~spdz2_ext_processor_Z2()
 {
 }
 
-int spdz2_ext_processor_Z2::mix_add(u_int64_t * share, u_int64_t scalar)
+int spdz2_ext_processor_Z2::init(const int pid, const int num_of_parties, const int thread_id, const char * field,
+		 	 	 	 	 	 	 	 	 const int open_count, const int mult_count, const int bits_count, int log_level)
 {
-
-//	syslog(LOG_INFO, "spdz2_ext_processor_Z2::mix_add: (s)%lu + (c)%lu", *share, scalar);
-	Z2nShareReplicated<SPDZEXT_VALTYPE> input(1), output(1);
-	input.elem1[0] = share[0];
-	input.elem2[0] = share[1];
-
-	if(the_party->addM(1, input, scalar, output))
+	if(0 == spdz2_ext_processor_base::init(pid, num_of_parties, thread_id, field, open_count, mult_count, bits_count, log_level))
 	{
-		share[0] = output.elem1[0];
-		share[1] = output.elem2[0];
-//		syslog(LOG_INFO, "spdz2_ext_processor_Z2::mix_add: result = (s)%lu, %lu", share[0], share[1]);
-		return 0;
+		the_party = new NecProtocolPartyBoolFor3P<uint64_t>(pid, 0);
+		the_party->init();
 	}
-	syslog(LOG_ERR, "spdz2_ext_processor_Z2::mix_add: protocol addShareAndScalar failure.");
-
-	return -1;
-}
-
-int spdz2_ext_processor_Z2::si_add(u_int64_t * share, u_int64_t scalar)
-{
-
-//	syslog(LOG_INFO, "spdz2_ext_processor_Z2::si_add: (s)%lu + (c)%lu", *share, scalar);
-	Z2nShareReplicated<SPDZEXT_VALTYPE> input(1), output(1);
-	input.elem1[0] = share[0];
-	input.elem2[0] = share[1];
-
-	if(the_party->addSI(1, input, scalar, output))
-	{
-		share[0] = output.elem1[0];
-		share[1] = output.elem2[0];
-//		syslog(LOG_INFO, "spdz2_ext_processor_Z2::mix_si: result = (s)%lu, %lu", share[0], share[1]);
-		return 0;
-	}
-	syslog(LOG_ERR, "spdz2_ext_processor_Z2::mix_si: protocol addShareAndScalar failure.");
-
-	return -1;
-}
-
-int spdz2_ext_processor_Z2::mix_sub_scalar(u_int64_t * share, u_int64_t scalar)
-{
-
-//	syslog(LOG_INFO, "spdz2_ext_processor_Z2::mix_sub_scalar: (s)%lu - (c)%lu", *share, scalar);
-	Z2nShareReplicated<SPDZEXT_VALTYPE> input(1), output(1);
-	input.elem1[0] = share[0];
-	input.elem2[0] = share[1];
-
-	if(the_party->subML(1, input, scalar, output))
-	{
-		share[0] = output.elem1[0];
-		share[1] = output.elem2[0];
-//		syslog(LOG_INFO, "spdz2_ext_processor_Z2::mix_sub_scalar: result = (s)%lu", *share);
-		return 0;
-	}
-	syslog(LOG_ERR, "spdz2_ext_processor_Z2::mix_sub_scalar: protocol shareSubScalar failure.");
-
-	return -1;
-}
-
-int spdz2_ext_processor_Z2::mix_sub_share(u_int64_t scalar, u_int64_t * share)
-{
-
-//	syslog(LOG_INFO, "spdz2_ext_processor_Z2::mix_sub_share: (c)%lu - (s)%lu", scalar, *share);
-	Z2nShareReplicated<SPDZEXT_VALTYPE> input(1), output(1);
-	input.elem1[0] = share[0];
-	input.elem2[0] = share[1];
-
-	if(the_party->subMR(1, scalar, input, output))
-	{
-		share[0] = output.elem1[0];
-		share[1] = output.elem2[0];
-//		syslog(LOG_INFO, "spdz2_ext_processor_Z2::mix_sub_share: result = (s)%lu", *share);
-		return 0;
-	}
-	syslog(LOG_ERR, "spdz2_ext_processor_Z2::mix_sub_share: protocol shareSubScalar failure.");
-
-	return -1;
-}
-
-int spdz2_ext_processor_Z2::mix_mul(u_int64_t * share, u_int64_t scalar)
-{
-
-//	syslog(LOG_INFO, "spdz2_ext_processor_Z2::mix_add: (s)%lu + (c)%lu", *share, scalar);
-	Z2nShareReplicated<SPDZEXT_VALTYPE> input(1), output(1);
-	input.elem1[0] = share[0];
-	input.elem2[0] = share[1];
-
-	if(the_party->mulM(1, input, scalar, output))
-	{
-		share[0] = output.elem1[0];
-		share[1] = output.elem2[0];
-//		syslog(LOG_INFO, "spdz2_ext_processor_Z2::mix_add: result = (s)%lu, %lu", share[0], share[1]);
-		return 0;
-	}
-	syslog(LOG_ERR, "spdz2_ext_processor_Z2::mix_add: protocol addShareAndScalar failure.");
-
-	return -1;
-}
-
-int spdz2_ext_processor_Z2::si_mul(u_int64_t * share, u_int64_t scalar)
-{
-
-//	syslog(LOG_INFO, "spdz2_ext_processor_Z2::si_mul: (s)%lu + (c)%lu", *share, scalar);
-	Z2nShareReplicated<SPDZEXT_VALTYPE> input(1), output(1);
-	input.elem1[0] = share[0];
-	input.elem2[0] = share[1];
-
-	if(the_party->mulSI(1, input, scalar, output))
-	{
-		share[0] = output.elem1[0];
-		share[1] = output.elem2[0];
-//		syslog(LOG_INFO, "spdz2_ext_processor_Z2::si_mul: result = (s)%lu, %lu", share[0], share[1]);
-		return 0;
-	}
-	syslog(LOG_ERR, "spdz2_ext_processor_Z2::si_mul: protocol mulShareAndImmediateScalar failure.");
-
-	return -1;
-}
-
-int spdz2_ext_processor_Z2::skew_dec(u_int64_t * share, const int num_of_bit, u_int64_t * output_shares, int ring_size_in, int ring_size_out) //output_shares[num_of_bit * 3][2]
-{
-//	syslog(LOG_INFO, "spdz2_ext_processor_Z2::skew_dec: (s)%lu + (c)%x", *share, num_of_bit);
-	Z2nShareReplicated<SPDZEXT_VALTYPE> input(1), output(3);
-	input.elem1[0] = share[0];
-	input.elem2[0] = share[1];
-
-	if(the_party->SkewInj(input, output, ring_size_out))
-	{
-		for(int i = 0; i < num_of_bit; i++)
-		{
-			output_shares[6 * i] = output.elem1[3 * i];
-			output_shares[6 * i + 1] = output.elem2[3 * i];
-			output_shares[6 * i + 2] = output.elem1[3 * i + 1];
-			output_shares[6 * i + 3] = output.elem2[3 * i + 1];
-			output_shares[6 * i + 4] = output.elem1[3 * i + 2];
-			output_shares[6 * i + 5] = output.elem2[3 * i + 2];
-		}
-//		syslog(LOG_INFO, "spdz2_ext_processor_Z2::skew_dec: success");
-		return 0;
-	}
-	syslog(LOG_ERR, "spdz2_ext_processor_Z2::skew_dec: protocol skew_decomposition is failure.");
-
-	return -1;
-}
-
-int spdz2_ext_processor_Z2::post_rec(u_int64_t * input_shares, const int ring_size, u_int64_t * output_share) //input_shares[ring_size][2]
-{
-//	syslog(LOG_INFO, "spdz2_ext_processor_Z2::post_rec");
-	Z2nShareReplicated<SPDZEXT_VALTYPE> input(ring_size);
-	// Z2nShareReplicated<SPDZEXT_VALTYPE> output(ring_size);
-	Z2nShareReplicated<SPDZEXT_VALTYPE> output(1);
-
-	// cout << "before input.initialize:" << endl;
-	for(int i = 0; i < ring_size; i++)
-	{
-		input.elem1[i] = input_shares[2*i];
-		input.elem2[i] = input_shares[2*i+1];
-	}
-	// output.elem1[0] = 0;
-	// output.elem2[0] = 0;
-	// cout << "after input.initialize:" << endl;
-	if(the_party->PostRec(ring_size, input, output))
-	{
-		// cout << "after PostRec:" << endl;
-
-		// cout << "output.elem1[0]" << endl;
-		// cout << output.elem1[0] << endl;
-
-		// output_share[0] = output.elem1[ring_size - 1];
-		output_share[0] = output.elem1[0];
-
-		// cout << "output_share[0]" << endl;
-		// cout << output_share[0] << endl;
-
-		// output_share[1] = output.elem2[ring_size - 1];
-		output_share[1] = output.elem2[0];
-
-		// cout << "after output_share:" << endl;
-//		syslog(LOG_INFO, "spdz2_ext_processor_Z2::post_rec: success");
-		// cout << "after test:" << endl;
-		return 0;
-	}
-	syslog(LOG_ERR, "spdz2_ext_processor_Z2::post_rec: protocol post_re-composition is failure.");
-
-	return -1;
-}
-
-int spdz2_ext_processor_Z2::skew_inj(u_int64_t * share, u_int64_t output_shares[][2]) //output_shares[3][2]
-{
-//	syslog(LOG_INFO, "spdz2_ext_processor_Z2::skew_inj: (s)%lu ", *share);
-	Z2nShareReplicated<SPDZEXT_VALTYPE> input(1), output(3);
-	input.elem1[0] = share[0];
-	input.elem2[0] = share[1];
-
-	if(the_party->SkewInj(input, output, sizeof(SPDZEXT_VALTYPE) * 8))
-	{
-		output_shares[0][0] = output.elem1[0];
-		output_shares[0][1] = output.elem2[0];
-		output_shares[1][0] = output.elem1[1];
-		output_shares[1][1] = output.elem2[1];
-		output_shares[2][0] = output.elem1[2];
-		output_shares[2][1] = output.elem2[2];
-
-//		syslog(LOG_INFO, "spdz2_ext_processor_Z2::skew_inj: success");
-		return 0;
-	}
-	syslog(LOG_ERR, "spdz2_ext_processor_Z2::skew_inj: protocol skew_injection is failure.");
-
-	return -1;
-}
-
-int spdz2_ext_processor_Z2::skew_rec(u_int64_t * share, u_int64_t output_shares[][2]) //output_shares[3][2]
-{
-//	syslog(LOG_INFO, "spdz2_ext_processor_Z2::skew_rec: (s)%lu ", *share);
-	Z2nShareReplicated<SPDZEXT_VALTYPE> input(1), output(3);
-
-	/*
-	cout << "Z2: skew_rec (start)" << endl;
-	cout << "share[0]:" << endl;
-	cout << share[0] << endl;
-	cout << "share[1]:" << endl;
-	cout << share[1] << endl;
-	*/
-
-	input.elem1[0] = share[0];
-	input.elem2[0] = share[1];
-
-	if(the_party->SkewRec(input, output))
-	{
-		output_shares[0][0] = output.elem1[0];
-		output_shares[0][1] = output.elem2[0];
-		output_shares[1][0] = output.elem1[1];
-		output_shares[1][1] = output.elem2[1];
-		output_shares[2][0] = output.elem1[2];
-		output_shares[2][1] = output.elem2[2];
-
-//		syslog(LOG_INFO, "spdz2_ext_processor_Z2::skew_rec: success");
-		return 0;
-	}
-	syslog(LOG_ERR, "spdz2_ext_processor_Z2::skew_rec: protocol skew_re-composition is failure.");
-
-	return -1;
-}
-
-int spdz2_ext_processor_Z2::init_protocol()
-{
-	the_party = new NecProtocolPartyBoolFor3P<uint64_t>(party_id, offline_size);
-	the_party->init();
-	/*
-	if(!the_party->offline())
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_Z2::init_protocol: protocol offline() failure.");
-		return -1;
-	}
-	*/
 	return 0;
 }
 
-void spdz2_ext_processor_Z2::delete_protocol()
+int spdz2_ext_processor_Z2::term()
 {
 	delete the_party;
 	the_party = NULL;
-}
-
-bool spdz2_ext_processor_Z2::protocol_offline()
-{
-	//return the_party->offline();
+	LC(m_logcat).info("%s.", __FUNCTION__);
 	return 0;
 }
 
-bool spdz2_ext_processor_Z2::protocol_open()
+int spdz2_ext_processor_Z2::input(const int input_of_pid, const size_t num_of_inputs, uint64_t * input_value)
 {
-	bool op_open_success = false;
-
-	Z2nShareReplicated<SPDZEXT_VALTYPE> ext_shares_nec(shares.size()/2);
-	Z2nIntReplicated<SPDZEXT_VALTYPE> ext_opens_nec(shares.size()/2);
-//	syslog(LOG_INFO, "spdz2_ext_processor_Z2::protocol_open: calling open for %u shares", (u_int32_t)shares.size());
-
-	int cnt = 0;
-	for(std::vector<u_int64_t>::const_iterator i = shares.begin(); i != shares.end(); ++i)
+	if (0 != the_party->input(input_of_pid, num_of_inputs, input_value))
 	{
-		if (cnt%2==0) {ext_shares_nec.elem1[cnt/2] = (SPDZEXT_VALTYPE(*i)); cnt++; }
-		else { ext_shares_nec.elem2[cnt/2] = (SPDZEXT_VALTYPE(*i)); cnt++; }
-//		syslog(LOG_DEBUG, "spdz2_ext_processor_Z2::protocol_open() share value %lu", *i);
+		LC(m_logcat).error("%s: protocol input failure.", __FUNCTION__);
+		return -1;
 	}
 
-	shares.clear();
+	return 0;
+}
 
-	the_party->openShares(ext_shares_nec.getNumOfShares(), ext_shares_nec, ext_opens_nec);
 
-	opens.clear();
+int spdz2_ext_processor_Z2::closes(const int share_of_pid, const size_t value_count, const uint64_t * values, uint64_t * shares)
+{
+	std::vector<uint64_t> z2nshares1(GF2N_VECTOR*value_count);
+	std::vector<uint64_t> z2nshares2(GF2N_VECTOR*value_count);
+	std::vector<uint64_t> z2nvalues(GF2N_VECTOR*value_count);
 
-	//if(!do_verify || the_party->verify())
-	if (true) // tentative: verify() is not implemeneted
+	for(size_t i=0; i<GF2N_VECTOR*value_count; ++i) {
+		z2nvalues[i] = values[i];
+	}
+
+	if(0 == the_party->makeShare(share_of_pid, z2nvalues, z2nshares1, z2nshares2))
 	{
-		// std::cout << "spdz_ext_processor_cc_imp::exec_gopen: verify open for " << ext_opens_nec.getNumOfData() << std::endl;
-		for(int i=0; i<ext_opens_nec.getNumOfData(); i++)
+		for(size_t i=0; i<value_count; ++i)
 		{
-			opens.push_back(ext_opens_nec.elem[i]);
+			uint64_t * share = shares + (i*GF2N_LIMBS);
+			for(size_t j=0; j<GF2N_VECTOR; ++j)
+			{
+				share[j]   			 = z2nshares1[i*GF2N_VECTOR+j];
+				share[j+GF2N_LIMBS]   = z2nshares2[i*GF2N_VECTOR+j];
+			}
+		}
+		return 0;
+	}
+	else
+	{
+		LC(m_logcat).error("%s: protocol makeShare failure.", __FUNCTION__);
+	}
+	return -1;
+}
+
+int spdz2_ext_processor_Z2::open(const size_t share_count, const uint64_t * share_values, uint64_t * opens, int verify)
+{
+	int result = -1;
+	std::vector<uint64_t> z2nshares1(GF2N_VECTOR*share_count);
+	std::vector<uint64_t> z2nshares2(GF2N_VECTOR*share_count);
+	std::vector<uint64_t> z2nopens(GF2N_VECTOR*share_count);
+
+	for(size_t i=0; i<share_count; ++i)
+	{
+		const uint64_t * share = share_values + i*GF2N_SHR_LIMBS*GF2N_VECTOR;
+
+		for(size_t j=0; j<GF2N_VECTOR; ++j)
+		{
+			z2nshares1[i*GF2N_VECTOR+j] = share[j];
+			z2nshares2[i*GF2N_VECTOR+j] = share[j+GF2N_LIMBS*GF2N_VECTOR];
+		}
+	}
+
+	if(0 == the_party->openShare((int)GF2N_VECTOR*share_count, z2nshares1, z2nshares2, z2nopens))
+	{
+		if(!verify || the_party->verify())
+		{
+			for(size_t i=0; i<GF2N_VECTOR*share_count; ++i)
+			{
+				opens[i] = z2nopens[i];
+			}
+			result = 0;
+		}
+		else
+		{
+			LC(m_logcat).error("%s: verify failure.", __FUNCTION__);
 		}
 	}
 	else
 	{
-		std::cerr << "spdz_ext_processor_cc_imp::exec_gopen: verify failed - no open values returned." << std::endl;
+		LC(m_logcat).error("%s: openShare failure.", __FUNCTION__);
 	}
-
-	op_open_success = true;
-
-	return op_open_success;
+	return result;
 }
 
-bool spdz2_ext_processor_Z2::protocol_triple()
+int spdz2_ext_processor_Z2::verify(int * error)
 {
-	bool op_triple_success = false;
+	return (0 == the_party->verify())? 0: -1;
+}
 
-	*pa = 0;
-	*pb = 0;
-	*pc = 0;
 
-	/* Not implemented yet
-	 *
-	std::vector<ZpMersenneLongElement> triple(3);
-	if(op_triple_success = the_party->triples(1, triple))
+int spdz2_ext_processor_Z2::mult(const size_t share_count, const uint64_t * xshares, const uint64_t * yshares, uint64_t * products, int verify)
+
+{
+	int result = -1;
+
+	LC(m_logcat).info("%s called for %lu shares.", __FUNCTION__, share_count);
+	std::vector<uint64_t> x_shares1(GF2N_VECTOR*share_count);
+	std::vector<uint64_t> x_shares2(GF2N_VECTOR*share_count);
+	std::vector<uint64_t> y_shares1(GF2N_VECTOR*share_count);
+	std::vector<uint64_t> y_shares2(GF2N_VECTOR*share_count);
+	std::vector<uint64_t> xy_shares1(GF2N_VECTOR*share_count);
+	std::vector<uint64_t> xy_shares2(GF2N_VECTOR*share_count);
+
+	for(size_t i=0; i<share_count; ++i)
 	{
-		*pa = triple[0].elem;
-		*pb = triple[1].elem;
-		*pc = triple[2].elem;
-		syslog(LOG_DEBUG, "spdz2_ext_processor_Z2::protocol_triple: share a = %lu; share b = %lu; share c = %lu;", *pa, *pb, *pc);
-	}
-	*/
-	op_triple_success = true; // tentative
-
-	return op_triple_success;
-}
-
-bool spdz2_ext_processor_Z2::protocol_input()
-{
-	bool op_input_success = false;
-//	the_party->getInputFromOneParty(input_party_id, p_input_value);
-//	op_input_success = true; //tentative
-	op_input_success = the_party->shareInput(input_party_id, num_input, p_input_value, p_output_value);
-	return op_input_success;
-}
-
-bool spdz2_ext_processor_Z2::protocol_input_asynch()
-{
-	bool op_input_asynch_success = false;
-	input_values.clear();
-	input_values.resize(num_of_inputs, 0);
-
-	op_input_asynch_success = true; // tentative
-
-	return op_input_asynch_success;
-}
-
-bool spdz2_ext_processor_Z2::protocol_mult()
-{
-	bool op_mult_success = false;
-	size_t xy_pair_count = mult_values.size()/4;
-
-	Z2nShareReplicated<SPDZEXT_VALTYPE> x_shares(xy_pair_count), y_shares(xy_pair_count), xy_shares(xy_pair_count);
-
-	//	######## without packing, 64-bit communication per gate ##########
-
-//	for(size_t i = 0; i < xy_pair_count; ++i)
-//	{
-//		x_shares.elem1[i] = mult_values[4*i];
-//		x_shares.elem2[i] = mult_values[4*i+1];
-//		y_shares.elem1[i] = mult_values[4*i+2];
-//		y_shares.elem2[i] = mult_values[4*i+3];
-////		syslog(LOG_DEBUG, "spdz_ext_processor_cc_imp::exec_mult: X-Y pair %lu: X=(%lu,%lu) Y=(%lu,%lu)", i, x_shares.elem1[i], x_shares.elem2[i], y_shares.elem1[i], y_shares.elem2[i]);
-//	}
-//
-//	if((op_mult_success = the_party->multShares(xy_pair_count, x_shares, y_shares, xy_shares)))
-//	{
-//		for(size_t i = 0; i < xy_pair_count; ++i)
-//		{
-//			products.push_back(xy_shares.elem1[i]);
-//			products.push_back(xy_shares.elem2[i]);
-////			syslog(LOG_DEBUG, "spdz_ext_processor_cc_imp::exec_mult: X-Y product %lu: X*Y=(%lu,%lu)", i, products[2*i], products[2*i+1]);
-//		}
-//	}
-
-	//	######## without packing, 8-bit communication per gate ##########
-
-//	uint8_t x_shares_byte[2*xy_pair_count];
-//	uint8_t y_shares_byte[2*xy_pair_count];
-//	uint8_t xy_shares_byte[2*xy_pair_count];
-//
-//	for (size_t i=0; i<xy_pair_count; i++) {
-//		x_shares_byte[2*i]   = (uint8_t)(mult_values[4*i]   & 0xFF);
-//		x_shares_byte[2*i+1] = (uint8_t)(mult_values[4*i+1] & 0xFF);
-//		y_shares_byte[2*i]   = (uint8_t)(mult_values[4*i+2] & 0xFF);
-//		y_shares_byte[2*i+1] = (uint8_t)(mult_values[4*i+3] & 0xFF);
-//	}
-//
-//	if((op_mult_success = the_party->multShares(xy_pair_count, x_shares_byte, y_shares_byte, xy_shares_byte)))
-//	{
-//		for(size_t i = 0; i < xy_pair_count; ++i)
-//		{
-//			products.push_back((SPDZEXT_VALTYPE)(xy_shares_byte[i]));
-//			products.push_back((SPDZEXT_VALTYPE)(xy_shares_byte[xy_pair_count+i]));
-////	 		cout << "xy_shares_byte = " << (uint32_t)xy_shares_byte[i] << ", " << (uint32_t)xy_shares_byte[xy_pair_count+i] << endl;
-////			syslog(LOG_DEBUG, "spdz_ext_processor_cc_imp::exec_mult: X-Y product %lu: X*Y=(%lu,%lu)", i, products[2*i], products[2*i+1]);
-//		}
-//	}
-
-//	######## with packing ##########
-
-	int bufsize = ceil((float)xy_pair_count/8);
-
-	memset(&x1_buf[0], 0, bufsize);
-	memset(&x2_buf[0], 0, bufsize);
-	memset(&y1_buf[0], 0, bufsize);
-	memset(&y2_buf[0], 0, bufsize);
-
-	for (size_t i=0; i<xy_pair_count; i++) {
-		x1_buf[i/8] ^= (mult_values[4*i]   & 0x1) << (i%8);
-		x2_buf[i/8] ^= (mult_values[4*i+1] & 0x1) << (i%8);
-		y1_buf[i/8] ^= (mult_values[4*i+2] & 0x1) << (i%8);
-		y2_buf[i/8] ^= (mult_values[4*i+3] & 0x1) << (i%8);
-	}
-
-	if((op_mult_success = the_party->multShares(bufsize, x1_buf, x2_buf, y1_buf, y2_buf, xy1_buf, xy2_buf)))
-	{
-		for(size_t i = 0; i < xy_pair_count; ++i)
+		const uint64_t * xshare = xshares + i*GF2N_SHR_LIMBS*GF2N_VECTOR;
+		const uint64_t * yshare = yshares + i*GF2N_SHR_LIMBS*GF2N_VECTOR;
+		for(size_t j=0; j<GF2N_VECTOR; ++j)
 		{
-			uint8_t tmpshare1 = xy1_buf[i/8] >> (i%8);
-			uint8_t tmpshare2 = xy2_buf[i/8] >> (i%8);
-			SPDZEXT_VALTYPE share1 = (SPDZEXT_VALTYPE)tmpshare1 & 0x1;
-			SPDZEXT_VALTYPE share2 = (SPDZEXT_VALTYPE)tmpshare2 & 0x1;
-			products.push_back(share1);
-			products.push_back(share2);
+			x_shares1[i*GF2N_VECTOR+j] = xshare[j];
+			x_shares2[i*GF2N_VECTOR+j] = xshare[j+GF2N_LIMBS*GF2N_VECTOR];
+			y_shares1[i*GF2N_VECTOR+j] = yshare[j];
+			y_shares2[i*GF2N_VECTOR+j] = yshare[j+GF2N_LIMBS*GF2N_VECTOR];
 		}
 	}
 
+	if(0 == the_party->multShares((int)GF2N_VECTOR*share_count, x_shares1, x_shares2, y_shares1, y_shares2, xy_shares1, xy_shares2))
+	{
+		for(size_t i=0; i<share_count; ++i)
+		{
+			uint64_t * product = products + i*GF2N_SHR_LIMBS*GF2N_VECTOR;
+			for(size_t j=0; j<GF2N_VECTOR; ++j)
+			{
+				product[j]                         = xy_shares1[i*GF2N_VECTOR+j];
+				product[j+GF2N_LIMBS*GF2N_VECTOR]  = xy_shares2[i*GF2N_VECTOR+j];
+			}
+		}
+		result = 0;
+	}
 	else
 	{
-		syslog(LOG_ERR, "spdz_ext_processor_cc_imp::exec_mult: protocol mult failure.");
+		LC(m_logcat).error("%s: protocol mult failure.", __FUNCTION__);
 	}
 
-	return op_mult_success;
+	return result;
 }
 
-bool spdz2_ext_processor_Z2::protocol_share_immediates()
-{
-	bool op_share_immediates_success = false;
-	/* Not implemented yet
-	 *
-	size_t value_count =  immediates_values.size();
-	std::vector<ZpMersenneLongElement> shares(value_count);
 
-	if(op_share_immediates_success = the_party->load_share_immediates(0, shares, immediates_values))
+int spdz2_ext_processor_Z2::mix_add(const uint64_t * share, const uint64_t * scalar, uint64_t * sum)
+{
+	for(size_t i=0; i<GF2N_VECTOR; ++i)
 	{
-		for(size_t i = 0; i < value_count; ++i)
+		uint64_t input[2], output[2], arg;
+		input[0] = share[i];
+		input[1] = share[i+GF2N_LIMBS*GF2N_VECTOR];
+		arg = scalar[i];
+		if (m_pid == 0) {
+			output[0] = input[0];
+			output[1] = input[1];
+		}
+		else if (m_pid == 1) {
+			output[0] = input[0] ^ arg;
+			output[1] = input[1] ^ arg;
+		}
+		else if (m_pid == 2) {
+			output[0] = input[0] ^ arg;
+			output[1] = input[1];
+		}
+		sum[i]                         = output[0];
+		sum[i+GF2N_LIMBS*GF2N_VECTOR]  = output[1];
+	}
+	return 0;
+}
+
+int spdz2_ext_processor_Z2::mix_sub_scalar(const uint64_t * share, const uint64_t * scalar, uint64_t * diff)
+{
+	for(size_t i=0; i<GF2N_VECTOR; ++i)
+	{
+		uint64_t input[2], output[2], arg;
+		input[0] = share[i];
+		input[1] = share[i+GF2N_LIMBS*GF2N_VECTOR];
+		arg = scalar[i];
+		if (m_pid == 0) {
+			output[0] = input[0];
+			output[1] = input[1];
+		}
+		else if (m_pid == 1) {
+			output[0] = input[0] ^ arg;
+			output[1] = input[1] ^ arg;
+		}
+		else if (m_pid == 2) {
+			output[0] = input[0] ^ arg;
+			output[1] = input[1];
+		}
+		diff[i]                         = output[0];
+		diff[i+GF2N_LIMBS*GF2N_VECTOR]  = output[1];
+		LC(m_logcat + ".acct").debug("%s: sh=%lu; sc=%lu; df=%lu;", __FUNCTION__, share[i], scalar[i], diff[i]);
+	}
+	return 0;
+}
+
+int spdz2_ext_processor_Z2::mix_sub_share(const uint64_t * scalar, const uint64_t * share, uint64_t * diff)
+{
+	for(size_t i=0; i<GF2N_VECTOR; ++i)
+	{
+		uint64_t input[2], output[2], arg;
+		input[0] = share[i];
+		input[1] = share[i+GF2N_LIMBS*GF2N_VECTOR];
+		arg = scalar[i];
+		if (m_pid == 0) {
+			output[0] =  input[0];
+			output[1] =  input[1];
+		}
+		else if (m_pid == 1) {
+			output[0] = arg ^ input[0];
+			output[1] = arg ^ input[1];
+		}
+		else if (m_pid == 2) {
+			output[0] = arg ^ input[0];
+			output[1] = input[1];
+		}
+		diff[i]                          = output[0];
+		diff[i+GF2N_LIMBS*GF2N_VECTOR]   = output[1];
+		LC(m_logcat + ".acct").debug("%s: sh=%lu; sc=%lu; df=%lu;", __FUNCTION__, share[i], scalar[i], diff[i]);
+	}
+	return 0;
+}
+
+int spdz2_ext_processor_Z2::mix_mul(const uint64_t * share, const uint64_t * scalar, uint64_t * product)
+{
+	for(size_t i=0; i<GF2N_VECTOR; ++i)
+	{
+		uint64_t input[2], output[2], arg;
+		input[0] = share[i];
+		input[1] = share[i+GF2N_LIMBS*GF2N_VECTOR];
+		arg = scalar[i];
+		if (m_pid == 0) {
+			output[0] = input[0] & arg;
+			output[1] = input[1] & arg;
+		}
+		else if (m_pid == 1) {
+			output[0] = input[0] & arg;
+			output[1] = input[1] & arg;
+		}
+		else if (m_pid == 2) {
+			output[0] = input[0] & arg;
+			output[1] = input[1] & arg;
+		}
+		product[i]                          = output[0];
+		product[i+GF2N_LIMBS*GF2N_VECTOR]   = output[1];
+		LC(m_logcat + ".acct").debug("%s: sh=%lu; sc=%lu; pd=%lu;", __FUNCTION__, share[i], scalar[i], product[i]);
+	}
+	return 0;
+}
+
+int spdz2_ext_processor_Z2::adds(const uint64_t * share1, const uint64_t * share2, uint64_t * sum)
+{
+	for(size_t i=0; i<GF2N_VECTOR; ++i)
+	{
+		uint64_t __share1[2], __share2[2];
+		__share1[0] = share1[i];
+		__share1[1] = share1[i+GF2N_LIMBS*GF2N_VECTOR];
+		__share2[0] = share2[i];
+		__share2[1] = share2[i+GF2N_LIMBS*GF2N_VECTOR];
+		sum[i]                         = __share1[0] ^ __share2[0];
+		sum[i+GF2N_LIMBS*GF2N_VECTOR]  = __share1[1] ^ __share2[1];
+
+		LC(m_logcat + ".acct").debug("%s: sh1=%lu; sh2=%lu; sum=%lu;", __FUNCTION__, share1[i], share2[i], sum[i]);
+	}
+	return 0;
+}
+
+int spdz2_ext_processor_Z2::subs(const uint64_t * share1, const uint64_t * share2, uint64_t * diff)
+{
+	for(size_t i=0; i<GF2N_VECTOR; ++i)
+	{
+		uint64_t __share1[2], __share2[2];
+		__share1[0] = share1[i];
+		__share1[1] = share1[i+GF2N_LIMBS*GF2N_VECTOR];
+		__share2[0] = share2[i];
+		__share2[1] = share2[i+GF2N_LIMBS*GF2N_VECTOR];
+		diff[i]                         = __share1[0] ^ __share2[0];
+		diff[i+GF2N_LIMBS*GF2N_VECTOR]  = __share1[1] ^ __share2[1];
+		LC(m_logcat + ".acct").debug("%s: sh1=%lu; sh2=%lu; dif=%lu;", __FUNCTION__, share1[i], share2[i], diff[i]);
+	}
+	return 0;
+}
+
+int spdz2_ext_processor_Z2::skew_decomp(const size_t bits_count, const uint64_t * bits_input, uint64_t * rings_output)
+{
+	int result = -1;
+
+	std::vector<uint64_t> b_x0(GF2N_VECTOR);
+	std::vector<uint64_t> b_x1(GF2N_VECTOR);
+	std::vector<uint64_t> r_x0_0(GF2N_VECTOR);
+	std::vector<uint64_t> r_x0_1(GF2N_VECTOR);
+	std::vector<uint64_t> r_x1_0(GF2N_VECTOR);
+	std::vector<uint64_t> r_x1_1(GF2N_VECTOR);
+	std::vector<uint64_t> r_x2_0(GF2N_VECTOR);
+	std::vector<uint64_t> r_x2_1(GF2N_VECTOR);
+
+	for(size_t i=0; i<GF2N_VECTOR; ++i) {
+		b_x0[i] = bits_input[i];
+		b_x1[i] = bits_input[i+GF2N_LIMBS*GF2N_VECTOR];
+	}
+
+	if(0 == the_party->skewDecomp((int)bits_count, b_x0, b_x1, r_x0_0, r_x0_1, r_x1_0, r_x1_1, r_x2_0, r_x2_1))
+	{
+		for(size_t i=0; i<bits_count; ++i)
 		{
-			immediates_shares.push_back(shares[i].elem);
-			syslog(LOG_DEBUG, "spdz2_ext_processor_Z2::protocol_share_immediates: share[%lu] = %lu", i, immediates_shares[i]);
+			uint64_t * rshare = rings_output;
+
+			for(size_t j=0; j<GF2N_VECTOR; ++j)
+			{
+				rshare[j]                          = r_x0_0[j];
+				rshare[j+GF2N_LIMBS*GF2N_VECTOR]   = r_x0_1[j];
+				rshare += GF2N_SHR_LIMBS*GF2N_VECTOR;
+				rshare[j]                          = r_x1_0[j];
+				rshare[j+GF2N_LIMBS*GF2N_VECTOR]   = r_x1_1[j];
+				rshare += GF2N_SHR_LIMBS*GF2N_VECTOR;
+				rshare[j]                          = r_x2_0[j];
+				rshare[j+GF2N_LIMBS*GF2N_VECTOR]   = r_x2_1[j];
+			}
+		}
+		result = 0;
+	}
+	else
+	{
+		LC(m_logcat).error("%s: protocol skew_decomp failure.", __FUNCTION__);
+	}
+
+	return result;
+}
+
+int spdz2_ext_processor_Z2::skew_recomp(const size_t bits_count, const uint64_t * bit_shares, uint64_t * ring_shares)
+{
+	int result = -1;
+	std::vector<uint64_t> bshares1(GF2N_VECTOR*bits_count);
+	std::vector<uint64_t> bshares2(GF2N_VECTOR*bits_count);
+	std::vector<uint64_t> rshares1(GF2N_VECTOR,0);
+	std::vector<uint64_t> rshares2(GF2N_VECTOR,0);
+
+	for(size_t i=0; i<bits_count; ++i)
+	{
+		for(size_t j=0; j<GF2N_VECTOR; ++j)
+		{
+			bshares1[i*GF2N_VECTOR+j] = bit_shares[i*GF2N_SHR_LIMBS*GF2N_VECTOR+j];
+			bshares2[i*GF2N_VECTOR+j] = bit_shares[i*GF2N_SHR_LIMBS*GF2N_VECTOR+j+GF2N_LIMBS*GF2N_VECTOR];
 		}
 	}
+
+	if(0 == the_party->skewRecomp((int)bits_count, bshares1, bshares2, rshares1, rshares2))
+	{
+		uint64_t * rshare = ring_shares;
+
+		for(size_t j=0; j<GFP_VECTOR; ++j)
+		{
+			rshare[2*j]                         = rshares1[j];
+			rshare[2*j+1]                       = 0;
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR]    = rshares2[j];
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR+1]  = 0;
+		}
+		result = 0;
+	}
 	else
 	{
-		syslog(LOG_ERR, "spdz2_ext_processor_Z2::protocol_share_immediates: protocol share_immediates failure.");
+		LC(m_logcat).error("%s: protocol skew_recomp failure.", __FUNCTION__);
 	}
-	*/
 
-	op_share_immediates_success = true; //tentative
-	return op_share_immediates_success;
+	return result;
 }
 
-bool spdz2_ext_processor_Z2::protocol_share_immediate()
+int spdz2_ext_processor_Z2::skew_inject(const uint64_t * bits_input, uint64_t * rings_output)
 {
-	bool op_share_immediate_success = false;
+	int result = -1;
 
-	Z2nIntReplicated<SPDZEXT_VALTYPE> values(1);
-	Z2nShareReplicated<SPDZEXT_VALTYPE> shares(1);
+	std::vector<uint64_t> b_x0(GF2N_VECTOR);
+	std::vector<uint64_t> b_x1(GF2N_VECTOR);
+	std::vector<uint64_t> r_x0_0(GF2N_VECTOR);
+	std::vector<uint64_t> r_x0_1(GF2N_VECTOR);
+	std::vector<uint64_t> r_x1_0(GF2N_VECTOR);
+	std::vector<uint64_t> r_x1_1(GF2N_VECTOR);
+	std::vector<uint64_t> r_x2_0(GF2N_VECTOR);
+	std::vector<uint64_t> r_x2_1(GF2N_VECTOR);
 
-	values.elem[0] = immediate_value[0];
-
-	if ((op_share_immediate_success = the_party->load_share_immediate(values, shares))) {
-		p_immediate_share[0] = shares.elem1[0];
-		p_immediate_share[1] = shares.elem2[0];
-//		syslog(LOG_INFO, "spdz2_ext_processor_Z2n::protocol_share_immediate: share value %lu", *p_immediate_share);
+	for(size_t i=0; i<GF2N_VECTOR; ++i) {
+		b_x0[i] = bits_input[i];
+		b_x1[i] = bits_input[i+GF2N_LIMBS*GF2N_VECTOR];
+//		cout << "input = " <<b_x0[i] << ", " << b_x1[i] << endl;
 	}
-	else {
-		syslog(LOG_ERR, "spdz2_ext_processor_Z2n::protocol_share_immediate: protocol load_share_immediates failure.");
+
+	if(0 == the_party->skewInject(b_x0, b_x1, r_x0_0, r_x0_1, r_x1_0, r_x1_1, r_x2_0, r_x2_1))
+	{
+		uint64_t * rshare = rings_output;
+
+		for(size_t j=0; j<GF2N_VECTOR; ++j)
+		{
+//			cout << "output 1 = " << r_x0_0[j] << ", "<<r_x0_1[j] << endl;
+			rshare[2*j]                        = r_x0_0[j];
+			rshare[2*j+1]                      = 0;
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR]   = r_x0_1[j];
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR+1] = 0;
+			rshare += SHR_LIMBS*GF2N_VECTOR;
+//			cout << "output 2 = " << r_x1_0[j] << ", "<<r_x1_1[j] << endl;
+			rshare[2*j]                        = r_x1_0[j];
+			rshare[2*j+1]                      = 0;
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR]   = r_x1_1[j];
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR+1] = 0;
+			rshare += SHR_LIMBS*GF2N_VECTOR;
+//			cout << "output 3 = " << r_x2_0[j] << ", "<<r_x2_1[j] << endl;
+			rshare[2*j]                        = r_x2_0[j];
+			rshare[2*j+1]                      = 0;
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR]   = r_x2_1[j];
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR+1] = 0;
+		}
+		result = 0;
+	}
+	else
+	{
+		LC(m_logcat).error("%s: protocol skew_inject failure.", __FUNCTION__);
 	}
 
-	return op_share_immediate_success;
+	return result;
 }
+
+int spdz2_ext_processor_Z2::mp_closes(const int share_of_pid, const size_t value_count, const uint64_t * values, uint64_t * shares)
+{
+	return 0;
+}
+
+int spdz2_ext_processor_Z2::mp_open(const size_t share_count, const uint64_t * share_values, uint64_t * opens, int verify)
+{
+	return 0;
+}
+
+int spdz2_ext_processor_Z2::mp_adds(const uint64_t * share1, const uint64_t * share2, uint64_t * sum)
+{
+	return 0;
+}
+
+int spdz2_ext_processor_Z2::mp_mix_add(const uint64_t * share, const uint64_t * scalar, uint64_t * sum)
+{
+	return 0;
+}
+
+int spdz2_ext_processor_Z2::mp_subs(const uint64_t * share1, const uint64_t * share2, uint64_t * diff)
+{
+	return 0;
+}
+
+int spdz2_ext_processor_Z2::mp_mix_sub_share(const uint64_t * scalar, const uint64_t * share, uint64_t * diff)
+{
+	return 0;
+}
+int spdz2_ext_processor_Z2::mp_mix_sub_scalar(const uint64_t * share, const uint64_t * scalar, uint64_t * diff)
+{
+	return 0;
+}
+int spdz2_ext_processor_Z2::mp_mix_mul(const uint64_t * share, const uint64_t * scalar, uint64_t * product)
+{
+	return 0;
+}
+int spdz2_ext_processor_Z2::mp_mult(const size_t share_count, const uint64_t * xshares, const uint64_t * yshares, uint64_t * products, int verify)
+{
+	return 0;
+}
+int spdz2_ext_processor_Z2::mp_skew_decomp(const size_t bits_count, const uint64_t * bits_input, uint64_t * rings_output)
+{
+	return 0;
+}
+
+int spdz2_ext_processor_Z2::mp_skew_recomp(const size_t bits_count, const uint64_t * bit_shares, uint64_t * ring_shares)
+{
+	int result = -1;
+	// GFP_VECTOR=GF2N_VECTOR=1
+	std::vector<uint64_t> bshares1(GF2N_VECTOR*bits_count);
+	std::vector<uint64_t> bshares2(GF2N_VECTOR*bits_count);
+	std::vector<uint64_t> rshares1(GFP_VECTOR*GFP_LIMBS,0);
+	std::vector<uint64_t> rshares2(GFP_VECTOR*GFP_LIMBS,0);
+//	uint64_t bshares1[GF2N_VECTOR*bits_count];
+//	uint64_t bshares2[GF2N_VECTOR*bits_count];
+//	uint64_t rshares1[GFP_VECTOR*GFP_LIMBS];
+//	uint64_t rshares2[GFP_VECTOR*GFP_LIMBS];
+
+
+	for(size_t i=0; i<bits_count; ++i)
+	{
+		for(size_t j=0; j<GF2N_VECTOR; ++j)
+		{
+			bshares1[i*GF2N_VECTOR+j] = bit_shares[i*GF2N_SHR_LIMBS*GF2N_VECTOR+j];
+			bshares2[i*GF2N_VECTOR+j] = bit_shares[i*GF2N_SHR_LIMBS*GF2N_VECTOR+j+GF2N_LIMBS*GF2N_VECTOR];
+		}
+	}
+
+	if(0 == the_party->MP_skewRecomp((int)bits_count, bshares1, bshares2, rshares1, rshares2))
+	{
+		uint64_t * rshare = ring_shares;
+
+		for(size_t j=0; j<GFP_VECTOR; ++j)
+		{
+			rshare[4*j]                         = rshares1[4*j];
+			rshare[4*j+1]                       = rshares1[4*j+1];
+			rshare[4*j+2]                       = rshares1[4*j+2];
+			rshare[4*j+3]                       = rshares1[4*j+3];
+			rshare[4*j+GFP_LIMBS*GFP_VECTOR]    = rshares2[4*j];
+			rshare[4*j+1+GFP_LIMBS*GFP_VECTOR]  = rshares2[4*j+1];
+			rshare[4*j+2+GFP_LIMBS*GFP_VECTOR]  = rshares2[4*j+2];
+			rshare[4*j+3+GFP_LIMBS*GFP_VECTOR]  = rshares2[4*j+3];
+		}
+		result = 0;
+	}
+	else
+	{
+		LC(m_logcat).error("%s: protocol skew_recomp failure.", __FUNCTION__);
+	}
+
+	return result;
+}
+
+int spdz2_ext_processor_Z2::mp_skew_inject(const uint64_t * bits_input, uint64_t * rings_output)
+{
+	int result = -1;
+
+	// no packing
+	// GF2N_VECTOR = GFP_VECTOR
+	std::vector<uint64_t> b_x0(GF2N_VECTOR);
+	std::vector<uint64_t> b_x1(GF2N_VECTOR);
+	std::vector<uint64_t> r_x0_0(GF2N_VECTOR);
+	std::vector<uint64_t> r_x0_1(GF2N_VECTOR);
+	std::vector<uint64_t> r_x1_0(GF2N_VECTOR);
+	std::vector<uint64_t> r_x1_1(GF2N_VECTOR);
+	std::vector<uint64_t> r_x2_0(GF2N_VECTOR);
+	std::vector<uint64_t> r_x2_1(GF2N_VECTOR);
+
+//	uint64_t b_x0[GF2N_VECTOR];
+//	uint64_t b_x1[GF2N_VECTOR];
+//	uint64_t r_x0_0[GF2N_VECTOR];
+//	uint64_t r_x0_1[GF2N_VECTOR];
+//	uint64_t r_x1_0[GF2N_VECTOR];
+//	uint64_t r_x1_1[GF2N_VECTOR];
+//	uint64_t r_x2_0[GF2N_VECTOR];
+//	uint64_t r_x2_1[GF2N_VECTOR];
+
+	for(size_t i=0; i<GF2N_VECTOR; ++i) {
+		b_x0[i] = bits_input[i];
+		b_x1[i] = bits_input[i+GF2N_LIMBS*GF2N_VECTOR];
+	}
+
+	if(0 == the_party->MP_skewInject(b_x0, b_x1, r_x0_0, r_x0_1, r_x1_0, r_x1_1, r_x2_0, r_x2_1))
+	{
+		uint64_t * rshare = rings_output;
+
+		for(size_t j=0; j<GF2N_VECTOR; ++j)
+		{
+			rshare[2*j]                        = r_x0_0[j];
+			rshare[2*j+1]                      = 0;
+			rshare[2*j+2]                      = 0;
+			rshare[2*j+3]                      = 0;
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR]   = r_x0_1[j];
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR+1] = 0;
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR+2] = 0;
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR+3] = 0;
+			rshare += SHR_LIMBS*GF2N_VECTOR;
+
+			rshare[2*j]                        = r_x1_0[j];
+			rshare[2*j+1]                      = 0;
+			rshare[2*j+2]                      = 0;
+			rshare[2*j+3]                      = 0;
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR]   = r_x1_1[j];
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR+1] = 0;
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR+2] = 0;
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR+3] = 0;
+			rshare += SHR_LIMBS*GF2N_VECTOR;
+
+			rshare[2*j]                        = r_x2_0[j];
+			rshare[2*j+1]                      = 0;
+			rshare[2*j+2]                      = 0;
+			rshare[2*j+3]                      = 0;
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR]   = r_x2_1[j];
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR+1] = 0;
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR+2] = 0;
+			rshare[2*j+GFP_LIMBS*GFP_VECTOR+3] = 0;
+		}
+		result = 0;
+	}
+	else
+	{
+		LC(m_logcat).error("%s: protocol skew_inject failure.", __FUNCTION__);
+	}
+	return result;
+}
+
+std::string spdz2_ext_processor_Z2::get_parties_file()
+{
+	return "parties_z2.txt";
+}
+
+std::string spdz2_ext_processor_Z2::get_log_file()
+{
+	char buffer[128];
+	snprintf(buffer, 128, "spdz2_x_z2_%d_%d.log", m_pid, m_thid);
+	return std::string(buffer);
+}
+
+std::string spdz2_ext_processor_Z2::get_log_category()
+{
+	return "z2";
+}
+

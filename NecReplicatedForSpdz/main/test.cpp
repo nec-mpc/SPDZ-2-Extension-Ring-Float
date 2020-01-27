@@ -25,20 +25,20 @@ int main(int argc, char* argv[]) {
 
   cout << "[test.main] invoke offline()" << endl;
   
-  protocol.offline();
+//  protocol.offline();
 
   //triples();
 
   cout << "[test.main] invoke shareInput()" << endl;
 
-  protocol.shareInput();
+//  protocol.shareInput();
 
   cout << "[test.main] invoke open()" << endl;
   
-  protocol.open();
-
+//  protocol.open();
+//
   cout << "[test.main] invoke test()" << endl;
 
-  protocol.test();
+//  protocol.test();
   
 }

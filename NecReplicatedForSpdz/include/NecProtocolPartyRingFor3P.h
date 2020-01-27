@@ -1,13 +1,22 @@
 #ifndef NEC_PROTOCOLPARTY_RING_FOR_3P_H_
 #define NEC_PROTOCOLPARTY_RING_FOR_3P_H_
 
+#include <cstdint>
 #include <stdlib.h>
 #include "MPCParty.hpp"
 #include "PRG.hpp"
 #include "Z2nIntReplicated.h"
 #include "Z2nShareReplicated.h"
+#include "../../spdzext_width_defs.h"
+#include "../../util.h"
+
 #include <thread>
 #include <iostream>
+#include <vector>
+#include <boost/multiprecision/cpp_int.hpp>
+#include <boost/format.hpp>
+namespace mp = boost::multiprecision;
+//#include <gmp.h>
 
 #define flag_print false
 #define flag_print_timings true
@@ -46,27 +55,17 @@ class NecProtocolPartyRingFor3P {
   int numOfMults = 1000; // should be given from spdz
   int m_nextParty, m_prevParty;
 
-  Z2nIntReplicated<T> input;
-
-  //Z2nIntReplicated<T> share1;
-  //Z2nIntReplicated<T> share2;
-  //Z2nIntReplicated<T> share3;
-
-  Z2nShareReplicated<T> ownShare;
-
-  Z2nIntReplicated<T> triples_a;
-  Z2nIntReplicated<T> triples_b;
-  Z2nIntReplicated<T> triples_c;
-
-  Z2nIntReplicated<T> output;
-
   PRG *prg_input;
 
   PRG *prg_i;
   PRG *prg_iMinus1;
-  
-	PRG *prg_genshare1;
-	PRG *prg_genshare2;
+
+  PRG *prg_genshare1;
+  PRG *prg_genshare2;
+
+  FILE * input_file_int;
+
+  mp::uint256_t mp_mod;
 
  public:
   
@@ -75,113 +74,36 @@ class NecProtocolPartyRingFor3P {
 
   void init(); // establish communications
   
-  void offline(); // generate input
+  int input(const int input_of_pid, const size_t num_of_inputs, T * input_value);
 
-  void triples(); // generate triples (tentatively do semi-honest multiplication)
+  int makeShare(const int pid, vector<T> &z2nvalues, vector<T> &z2nshares1, vector<T> &z2nshares2);
 
-  void shareInput(); // share input value (communicate with other parties)
+  int openShare(const int share_count, vector<T> &z2nshares1, vector<T> &z2nshares2, vector<T> &z2nopens);
 
-  void open(); //open share (communicate with other parties)
+  int verify();
 
-  void test(); // only for debugging
-  
-  void generateRandomness(int numOfOpens,
-			  Z2nIntReplicated<T> &secrets);
+  int multShares(const int share_count, vector<T> &xshares1, vector<T> &xshares2,
+		  	  	  	  	  	  	  	  	  	  vector<T> &yshares1, vector<T> &yshares2,
+											  vector<T> &xyshares1, vector<T> &xyshares2);
 
-  void triples(int numOfTriples,
-	       Z2nShareReplicated<T> &triples_x,
-	       Z2nShareReplicated<T> &triples_y,
-	       Z2nShareReplicated<T> &triples_z);
-  
-  void shareInput(int numOfShares,
-		  Z2nIntReplicated<T> &secrets,
-		  Z2nShareReplicated<T> &myShare);
-  
-  bool shareInput(int input_party_id,
-		  	  	  	  int num_input,
-		  	  	  	  T *input_values,
-					  T *output_values);
+  int skewDecomp(const int bits_count, vector<T> &rshares1, vector<T> &rshares2,
+  											vector<T> &b_x0_0, vector<T> &b_x0_1,
+  											vector<T> &b_x1_0, vector<T> &b_x1_1,
+											vector<T> &b_x2_0, vector<T> &b_x2_1);
 
-  void shareOneInput(int numOfShares,
-		  	  T &secrets,
-			  T *share1,
-			  T *share2,
-			  T *share3);
+  int openMPShare(const int size, vector<T> &z2nshares1, vector<T> &z2nshares2, vector<T> &z2nopens);
 
-  void getInputFromOneParty(int partyID, T *value);
+  int multMPShares(const int share_count, vector<T> &xshares1, vector<T> &xshares2,
+  		  	  	  	  	  	  	  	  	  	  vector<T> &yshares1, vector<T> &yshares2,
+  											  vector<T> &xyshares1, vector<T> &xyshares2);
 
-  void openShares(int numOfShares,
-	    Z2nShareReplicated<T> &shares,
-	    Z2nIntReplicated<T> &secrets);
-
-  void addS(int numOfShares,
-		  Z2nIntReplicated<T> &inShare1,
-		  Z2nIntReplicated<T> &inShare2,
-		  Z2nIntReplicated<T> &outShare);
-
-  void subS(int numOfShares,
-		  Z2nIntReplicated<T> &inShare1,
-		  Z2nIntReplicated<T> &inShare2,
-		  Z2nIntReplicated<T> &outShare);
-
-  bool SkewDec(int numOfBits,
-		  Z2nShareReplicated<T> &inShare,
-		  Z2nShareReplicated<T> &outShares);
-
-  bool PostRec(int ring_size,
-  		  Z2nShareReplicated<T> &inShares,
-  		  Z2nShareReplicated<T> &outShare);
-
-  bool SkewInj(
-  		  Z2nShareReplicated<T> &inShare,
-  		  Z2nShareReplicated<T> &outShares);
-
-  bool SkewRec(
-  		  Z2nShareReplicated<T> &inShare,
-  		  Z2nShareReplicated<T> &outShares);
-
-  bool mulM(int numOfShares,
-		  Z2nShareReplicated<T> &inShare,
-		  T coef,
-		  Z2nShareReplicated<T> &outShare);
-
-  bool mulSI(int numOfShares,
-		  Z2nShareReplicated<T> &inShare,
-		  T coef,
-		  Z2nShareReplicated<T> &outShare);
-
-  bool addM(int numOfShares,
-		  Z2nShareReplicated<T> &inShare,
-		  T coef,
-		  Z2nShareReplicated<T> &outShare);
-
-  bool addSI(int numOfShares,
-		  Z2nShareReplicated<T> &inShare,
-		  T coef,
-		  Z2nShareReplicated<T> &outShare);
-
-  bool subML(int numOfShares,
-		  Z2nShareReplicated<T> &inShare,
-		  T coef,
-		  Z2nShareReplicated<T> &outShare);
-
-  bool subMR(int numOfShares,
-		  T coef,
-		  Z2nShareReplicated<T> &inShare,
-		  Z2nShareReplicated<T> &outShare);
-
-  bool multShares(int numOfShares,
-		  Z2nShareReplicated<T> &x_shares,
-		  Z2nShareReplicated<T> &y_shares,
-		  Z2nShareReplicated<T> &xy_shares);
-
-  bool load_share_immediate(Z2nIntReplicated<T> & values,
-		  	  	  	  	  	Z2nShareReplicated<T> &shares);
-
-  void end();
-  
+  int MP_skewDecomp(const int bits_count, vector<T> &rshares1, vector<T> &rshares2,
+    											vector<T> &b_x0_0, vector<T> &b_x0_1,
+    											vector<T> &b_x1_0, vector<T> &b_x1_1,
+  											    vector<T> &b_x2_0, vector<T> &b_x2_1);
 };
-
+//
+//
 
 template <typename T>
 NecProtocolPartyRingFor3P<T>::NecProtocolPartyRingFor3P(int partyID, int numOfOpens)
@@ -203,6 +125,10 @@ NecProtocolPartyRingFor3P<T>::NecProtocolPartyRingFor3P(int partyID, int numOfOp
   m_nextParty = (m_partyId +1) % 3;
   m_prevParty = (m_nextParty + 1) % 3;
   mpcParty = NULL;
+
+  input_file_int = NULL;
+
+  mp_mod = (std::numeric_limits<mp::uint256_t>::max()) >> (256 - MP_RING_SIZE);
 }
 
 template <typename T>
@@ -210,618 +136,444 @@ NecProtocolPartyRingFor3P<T>::~NecProtocolPartyRingFor3P() {
   delete prg_i;
   delete prg_iMinus1;
   delete prg_input;
-//  delete prg_genshare1;
-//  delete prg_genshare2;
+  delete prg_genshare1;
+  delete prg_genshare2;
   delete mpcParty;
+  fclose(input_file_int);
+  input_file_int = NULL;
 }
 
 template <typename T>
 void NecProtocolPartyRingFor3P<T>::init() {
 	  mpcParty = new MPCParty(m_partyId, 0, "partiesMPCLocal.conf");
 //	  mpcParty = new MPCParty(m_partyId, 0, "partiesMPC.conf");
+	  char buffer[256];//static int read_input_line(FILE * input_file, std::string & line)
+	  //{
+	  //	char buffer[256];
+	  //	if(NULL != fgets(buffer, 256, input_file))
+	  //	{
+	  //		line = buffer;
+	  //		return 0;
+	  //	}
+	  //	else
+	  //		return -1;
+	  //}
 
-  input.init(numOfMults);
-
-  ownShare.init(numOfMults);
-  output.init(numOfMults);
-
-  triples_a.init(numOfMults);
-  triples_b.init(numOfMults);
-  triples_c.init(numOfMults);
+	  snprintf(buffer, 256, "integers_input_%d.txt", m_partyId);
+	  input_file_int = fopen(buffer, "r");
+	  if (NULL == input_file_int)
+	  {
+		  cout << "file "<< buffer << " doesn't exist. "<< endl;
+		  abort();
+	  }
 }
 
 template <typename T>
-void NecProtocolPartyRingFor3P<T>::offline() {
-  generateRandomness(numOfMults, input);
-}
-
-template <typename T>
-void NecProtocolPartyRingFor3P<T>::generateRandomness(int numOfOpens,
-					  Z2nIntReplicated<T> &secrets) {
-  // generate random values by same seed
-  for (int i=0; i<numOfOpens; i++) {
-    secrets.elem[i] = prg_input->getRandomLong();
-  }
-}
-
-template <typename T>
-void NecProtocolPartyRingFor3P<T>::triples() {
-	for (int i=0; i<numOfMults; i++) {
-		triples_a[i] = 0;
-		triples_b[i] = 0;
-		triples_c[i] = 0;
-	}
-	//triples(numOfMults, triples_a, triples_b, triples_c);
-}
-
-template <typename T>
-void NecProtocolPartyRingFor3P<T>::triples(int numOfTriples,
-			       Z2nShareReplicated<T> &share1,
-			       Z2nShareReplicated<T> &share2,
-			       Z2nShareReplicated<T> &share3)
+int NecProtocolPartyRingFor3P<T>::input(const int input_of_pid, const size_t num_of_inputs, T * input_value)
 {
-  
-#pragma ivdep
-	for (int i=0; i<numOfTriples; i++) {
-		// generate random shares [a], [b] and [c]
-		share1.elem1[i] = prg_i->getRandomLong();
-		share1.elem2[i] = prg_iMinus1->getRandomLong();
-		share2.elem1[i] = prg_i->getRandomLong();
-		share2.elem2[i] = prg_iMinus1->getRandomLong();
+	int sz = num_of_inputs;
 
-		share1.elem1[i] += share1.elem2[i];
-		share2.elem1[i] += share2.elem2[i];
-
-		// partial computation for [c] = [a] * [b]
-		share3.elem2[i] = share1.elem1[i]*share2.elem1[i] - share1.elem2[i]*share2.elem2[i];
-	}
-
-
-	//ring communication
-	mpcParty->Write(share3.elem2, numOfTriples, m_nextParty);
-	mpcParty->Read(share3.elem1, numOfTriples, m_prevParty);
-
-	// remain of the computation for [c] = [a]*[b]
-	for (int i=0; i<numOfTriples; i++) {
-		share3.elem1[i] += share3.elem2[i];
-	}
-
-}
-
-template <typename T>
-void NecProtocolPartyRingFor3P<T>::shareInput() {
-  shareInput(numOfMults, input, ownShare);
-}
-
-template <typename T>
-void NecProtocolPartyRingFor3P<T>::shareOneInput(int numOfShares,
-				  T &secret,
-				  T *share1,
-				  T *share2,
-				  T *share3)
-{
-  for (int i=0; i<numOfShares; i++) {
-	  share1[1] = prg_genshare1->getRandomLong();
-	  share2[1] = prg_genshare2->getRandomLong();
-	  share3[1] = secret - share1[1] - share2[1];
-	  share1[0] = share3[1] + share1[1];
-	  share2[0] = share1[1] + share2[1];
-	  share3[0] = share2[1] + share3[1];
-  }
-
-}
-
-template <typename T>
-void NecProtocolPartyRingFor3P<T>::shareInput(int numOfShares,
-				  Z2nIntReplicated<T> &secret,
-				  Z2nShareReplicated<T> &myShare)
-{
-  if (secret.getNumOfData() == 0) {
-    cout << "[NecProtocolPartyRingFor3P::shareInput] source size is 0" << endl;
-    exit(1);
-  }
-
-  Z2nShareReplicated<T> share1(secret.getNumOfData());
-  Z2nShareReplicated<T> share2(secret.getNumOfData());
-  Z2nShareReplicated<T> share3(secret.getNumOfData());
-
-#pragma ivdep
-  for (int i=0; i<numOfShares; i++) {
-    share1.elem2[i] = prg_genshare1->getRandomLong();
-    share2.elem2[i] = prg_genshare2->getRandomLong();
-    share3.elem2[i] = secret.elem[i] - share1.elem2[i] - share2.elem2[i];
-
-    share1.elem1[i] = share3.elem2[i] + share1.elem2[i];
-    share2.elem1[i] = share1.elem2[i] + share2.elem2[i];
-  }
-
-  if      (m_partyId == 0) { myShare = share1; }
-  else if (m_partyId == 1) { myShare = share2; }
-  else if (m_partyId == 2) { myShare = share3; }
-
-  if (flag_print) {
-    cout << "ownShare : " << endl;
-    ownShare.dump();
-  }
-  
-}
-
-template <typename T>
-bool NecProtocolPartyRingFor3P<T>::shareInput(int input_party_id,
-					  int num_input,
-		  	  	  	  T *input_values,
-					  T *output_values)
-{
-	T* shares[3];
-	shares[0] = new T[2*num_input];
-	shares[1] = new T[2*num_input];
-	shares[2] = new T[2*num_input];
-	if (m_partyId == input_party_id) {
-
-		for (int i=0; i<num_input; i++) {
-			shareOneInput(1, input_values[i], &shares[0][2*i], &shares[1][2*i], &shares[2][2*i]);
-		}
-
-		mpcParty->Write(shares[m_nextParty], 2*num_input, m_nextParty);
-		mpcParty->Write(shares[m_prevParty], 2*num_input, m_prevParty);
-		memcpy(output_values, shares[m_partyId], 2*num_input*sizeof(T));
-	}
-	else {
-		mpcParty->Read(output_values, 2*num_input, input_party_id);
-	}
-
-	return true;
-
-}
-
-template <typename T>
-void NecProtocolPartyRingFor3P<T>::open() {
-  openShares(numOfMults, ownShare, output);
-}
-
-template <typename T>
-void NecProtocolPartyRingFor3P<T>::openShares(int numOfShares,
-			    Z2nShareReplicated<T> &shares,
-			    Z2nIntReplicated<T> &ret)
-{
-  int size = shares.getNumOfShares();
-
-  T *recBuf;
-  recBuf = new T[size];
-
-  mpcParty->Write(shares.elem1, size, m_nextParty);
-  mpcParty->Read(recBuf, size, m_prevParty);
-
-   for (int i=0; i<size; i++) {
-    ret.elem[i] = shares.elem2[i] + recBuf[i];
-   }
-  
-}
-
-template <typename T>
-void NecProtocolPartyRingFor3P<T>::end()
-{}
-
-template <typename T>
-void NecProtocolPartyRingFor3P<T>::test()
-{
-  for (int i=0; i<numOfMults; i++) {
-    if (input.elem[i] != output.elem[i])
-      {
-	cout << "[NecProtocolPartyRingFor3P] test() failed: doesn't match" << endl;
-	exit(1);
-      }
-  }
-  if (flag_print) {
-    cout << "output: " << endl;
-    output.dump();
-  }
-  cout << "[NecProtocolPartyRingFor3P] all shares are successfully reconstructed. " << endl;
-}
-
-template <typename T>
-void NecProtocolPartyRingFor3P<T>::addS(int numOfShares,
-		Z2nIntReplicated<T> &inShare1,
-		Z2nIntReplicated<T> &inShare2,
-		Z2nIntReplicated<T> &outShare)
-{
-	for (int i=0; i<numOfShares; i++) {
-		outShare.elem[i] = inShare1.elem[i] + inShare2.elem[i];
-	}
-}
-
-
-template <typename T>
-void NecProtocolPartyRingFor3P<T>::subS(int numOfShares,
-		Z2nIntReplicated<T> &inShare1,
-		Z2nIntReplicated<T> &inShare2,
-		Z2nIntReplicated<T> &outShare)
-{
-	for (int i=0; i<numOfShares; i++) {
-		outShare.elem[i] = inShare1.elem[i] - inShare2.elem[i];
-	}
-}
-
-template <typename T>
-bool NecProtocolPartyRingFor3P<T>::SkewDec(int numOfBits,
-		  Z2nShareReplicated<T> &inShare,
-		  Z2nShareReplicated<T> &outShares)
-{
-	for(int i = 0; i < numOfBits; i++)
+	if (m_partyId == input_of_pid)
 	{
-		if (m_partyId == 0)
+		std::string str_input;
+		T int_input;
+		T share0[2*sz], share1[2*sz], share2[2*sz];
+		if (0 != read_input_line(input_file_int, str_input))
 		{
-			// [x_1,i]^B
-			outShares.elem1[3 * i] = 0;
-			outShares.elem2[3 * i] = 0;
-			// [x_2,i]^B
-			outShares.elem1[3 * i + 1] = ((inShare.elem1[0] - inShare.elem2[0]) >> i) & 1;
-			outShares.elem2[3 * i + 1] = 0;
-			// [x_3,i]^B
-			outShares.elem1[3 * i + 2] = 0;
-			outShares.elem2[3 * i + 2] = (inShare.elem2[0] >> i) & 1;
+			abort();
 		}
-		else if (m_partyId == 1)
-		{
-			// [x_1,i]^B
-			outShares.elem1[3 * i] = 0;
-			outShares.elem2[3 * i] = (inShare.elem2[0] >> i) & 1;
-			// [x_2,i]^B
-			outShares.elem1[3 * i + 1] = 0;
-			outShares.elem2[3 * i + 1] = 0;
-			// [x_3,i]^B
-			outShares.elem1[3 * i + 2] = ((inShare.elem1[0] - inShare.elem2[0]) >> i) & 1;
-			outShares.elem2[3 * i + 2] = 0;
-		}
-		else if (m_partyId == 2)
-		{
-			// [x_1,i]^B
-			outShares.elem1[3 * i] = ((inShare.elem1[0] - inShare.elem2[0]) >> i) & 1;
-			outShares.elem2[3 * i] = 0;
-			// [x_2,i]^B
-			outShares.elem1[3 * i + 1] = 0;
-			outShares.elem2[3 * i + 1] = (inShare.elem2[0] >> i) & 1;
-			// [x_3,i]^B
-			outShares.elem1[3 * i + 2] = 0;
-			outShares.elem2[3 * i + 2] = 0;
-		}
+		int_input = strtol(str_input.c_str(), NULL, 10);
 
-		outShares.elem1[3 * i] = outShares.elem1[3 * i] ^ outShares.elem2[3 * i];
-		outShares.elem1[3 * i + 1] = outShares.elem1[3 * i + 1] ^ outShares.elem2[3 * i + 1];
-		outShares.elem1[3 * i + 2] = outShares.elem1[3 * i + 2] ^ outShares.elem2[3 * i + 2];
+		share0[1] = prg_genshare1->getRandomLong();
+		share1[1] = prg_genshare2->getRandomLong();
+		share2[1] = int_input - share0[1] - share1[1];
+		share0[0] = share2[1] + share0[0];
+		share1[0] = share0[1] + share1[1];
+		share2[0] = share1[1] + share2[2];
+		mpcParty->Write(&share1[0], 2, m_nextParty);
+		mpcParty->Write(&share2[0], 2, m_prevParty);
+		input_value[0] = share0[0];
+		input_value[1] = 0;
+		input_value[2] = share0[1];
+		input_value[3] = 0;
 	}
-	return true;
-}
-
-template <typename T>
-bool NecProtocolPartyRingFor3P<T>::PostRec(int ring_size,
-		  Z2nShareReplicated<T> &inShares,
-		  Z2nShareReplicated<T> &outShare)
-{
-	for(int i = 0; i < ring_size; i++)
+	else
 	{
-		outShare.elem1[0] += ((inShares.elem1[i] ^ inShares.elem2[i]) << i);
-		outShare.elem2[0] += (inShares.elem2[i] << i);
+		T shares[2];
+		mpcParty->Read(&shares[0], 2, input_of_pid);
+		input_value[0] = shares[0];
+		input_value[1] = 0;
+		input_value[2] = shares[1];
+		input_value[3] = 0;
 	}
-	outShare.elem1[0] = outShare.elem1[0] + outShare.elem2[0];
-	return true;
 }
 
 template <typename T>
-bool NecProtocolPartyRingFor3P<T>::SkewInj(
-		  Z2nShareReplicated<T> &inShare,
-		  Z2nShareReplicated<T> &outShares)
+int NecProtocolPartyRingFor3P<T>::makeShare(const int pid, vector<T> &z2nvalues, vector<T> &z2nshares1, vector<T> &z2nshares2)
 {
+	size_t sz = z2nvalues.size();
+
 	if (m_partyId == 0)
 	{
-		// [x_1,i]^R
-		outShares.elem1[0] = 0;
-		outShares.elem2[0] = 0;
-		// [x_2,i]^R
-		outShares.elem1[1] = (inShare.elem1[0] - inShare.elem2[0]) & 1;
-		outShares.elem2[1] = 0;
-		// [x_3,i]^R
-		outShares.elem1[2] = 0;
-		outShares.elem2[2] = inShare.elem2[0] & 1;
+		for(size_t i=0; i<sz; ++i)
+		{
+			z2nshares1[i] = 0;
+			z2nshares2[i] = 0;
+		}
 	}
 	else if (m_partyId == 1)
 	{
-		// [x_1,i]^R
-		outShares.elem1[0] = 0;
-		outShares.elem2[0] = inShare.elem2[0] & 1;
-		// [x_2,i]^R
-		outShares.elem1[1] = 0;
-		outShares.elem2[1] = 0;
-		// [x_3,i]^R
-		outShares.elem1[2] = (inShare.elem1[0] - inShare.elem2[0]) & 1;
-		outShares.elem2[2] = 0;
+		for (size_t i=0; i<sz; ++i)
+		{
+			z2nshares1[i] = z2nvalues[i];
+			z2nshares2[i] = z2nvalues[i];
+
+		}
 	}
 	else if (m_partyId == 2)
 	{
-		// [x_1,i]^R
-		outShares.elem1[0] = (inShare.elem1[0] - inShare.elem2[0]) & 1;
-		outShares.elem2[0] = 0;
-		// [x_2,i]^R
-		outShares.elem1[1] = 0;
-		outShares.elem2[1] = inShare.elem2[0] & 1;
-		// [x_3,i]^R
-		outShares.elem1[2] = 0;
-		outShares.elem2[2] = 0;
-	}
-
-	outShares.elem1[0] = outShares.elem1[0] + outShares.elem2[0];
-	outShares.elem1[1] = outShares.elem1[1] + outShares.elem2[1];
-	outShares.elem1[2] = outShares.elem1[2] + outShares.elem2[2];
-
-	return true;
-}
-
-template <typename T>
-bool NecProtocolPartyRingFor3P<T>::SkewRec(
-		  Z2nShareReplicated<T> &inShare,
-		  Z2nShareReplicated<T> &outShares)
-{
-	if (m_partyId == 0)
-	{
-		// [x_1,i]^B
-		outShares.elem1[0] = 0;
-		outShares.elem2[0] = 0;
-		// [x_2,i]^B
-		outShares.elem1[1] = (inShare.elem1[0] - inShare.elem2[0]) & 1;
-		outShares.elem2[1] = 0;
-		// [x_3,i]^B
-		outShares.elem1[2] = 0;
-		outShares.elem2[2] = inShare.elem2[0] & 1;
-	}
-	else if (m_partyId == 1)
-	{
-		// [x_1,i]^B
-		outShares.elem1[0] = 0;
-		outShares.elem2[0] = inShare.elem2[0] & 1;
-		// [x_2,i]^B
-		outShares.elem1[1] = 0;
-		outShares.elem2[1] = 0;
-		// [x_3,i]^B
-		outShares.elem1[2] = (inShare.elem1[0] - inShare.elem2[0]) & 1;
-		outShares.elem2[2] = 0;
-	}
-	else if (m_partyId == 2)
-	{
-		// [x_1,i]^B
-		outShares.elem1[0] = (inShare.elem1[0] - inShare.elem2[0]) & 1;
-		outShares.elem2[0] = 0;
-		// [x_2,i]^B
-		outShares.elem1[1] = 0;
-		outShares.elem2[1] = inShare.elem2[0] & 1;
-		// [x_3,i]^B
-		outShares.elem1[2] = 0;
-		outShares.elem2[2] = 0;
-	}
-
-	outShares.elem1[0] = outShares.elem1[0] ^ outShares.elem2[0];
-	outShares.elem1[1] = outShares.elem1[1] ^ outShares.elem2[1];
-	outShares.elem1[2] = outShares.elem1[2] ^ outShares.elem2[2];
-
-	return true;
-}
-
-template <typename T>
-bool NecProtocolPartyRingFor3P<T>::mulM(int numOfShares,
-		Z2nShareReplicated<T> &inShare,
-		T coef,
-		Z2nShareReplicated<T> &outShare)
-{
-
-#pragma ivdep
-	for (int i=0; i<numOfShares; i++) {
-		outShare.elem1[i] = coef * inShare.elem1[i];
-		outShare.elem2[i] = coef * inShare.elem2[i];
-	}
-
-	return true;
-}
-
-template <typename T>
-bool NecProtocolPartyRingFor3P<T>::mulSI(int numOfShares,
-		Z2nShareReplicated<T> &inShare,
-		T coef,
-		Z2nShareReplicated<T> &outShare)
-{
-
-#pragma ivdep
-	for (int i=0; i<numOfShares; i++) {
-		outShare.elem1[i] = coef * inShare.elem1[i];
-		outShare.elem2[i] = coef * inShare.elem2[i];
-	}
-
-	return true;
-}
-
-template <typename T>
-bool NecProtocolPartyRingFor3P<T>::addM(int numOfShares,
-		Z2nShareReplicated<T> &inShare,
-		T coef,
-		Z2nShareReplicated<T> &outShare)
-{
-
-#pragma ivdep
-	if (m_partyId == 0) {
-		outShare = inShare;
-	}
-	else if (m_partyId == 1) {
-		for (int i=0; i<numOfShares; i++) {
-			outShare.elem1[i] = coef + inShare.elem1[i];
-			outShare.elem2[i] = coef + inShare.elem2[i];
-		}
-	}
-	else if (m_partyId == 2) {
-		for (int i=0; i<numOfShares; i++) {
-			outShare.elem1[i] = coef + inShare.elem1[i];
-			outShare.elem2[i] = inShare.elem2[i];
-		}
-	}
-	return true;
-}
-
-template <typename T>
-bool NecProtocolPartyRingFor3P<T>::addSI(int numOfShares,
-		Z2nShareReplicated<T> &inShare,
-		T coef,
-		Z2nShareReplicated<T> &outShare)
-{
-
-#pragma ivdep
-	if (m_partyId == 0) {
-		outShare = inShare;
-	}
-	else if (m_partyId == 1) {
-		for (int i=0; i<numOfShares; i++) {
-			outShare.elem1[i] = coef + inShare.elem1[i];
-			outShare.elem2[i] = coef + inShare.elem2[i];
-		}
-	}
-	else if (m_partyId == 2) {
-		for (int i=0; i<numOfShares; i++) {
-			outShare.elem1[i] = coef + inShare.elem1[i];
-			outShare.elem2[i] = inShare.elem2[i];
-		}
-	}
-	return true;
-}
-
-template <typename T>
-bool NecProtocolPartyRingFor3P<T>::subML(int numOfShares,
-		Z2nShareReplicated<T> &inShare,
-		T coef,
-		Z2nShareReplicated<T> &outShare)
-{
-
-#pragma ivdep
-	if (m_partyId == 0) {
-		outShare = inShare;
-	}
-	else if (m_partyId == 1) {
-		for (int i=0; i<numOfShares; i++) {
-			outShare.elem1[i] = inShare.elem1[i] - coef;
-			outShare.elem2[i] = inShare.elem2[i] - coef;
-		}
-	}
-	else if (m_partyId == 2) {
-		for (int i=0; i<numOfShares; i++) {
-			outShare.elem1[i] = inShare.elem1[i] - coef;
-			outShare.elem2[i] = inShare.elem2[i];
-		}
-	}
-
-	return true;
-}
-
-template <typename T>
-bool NecProtocolPartyRingFor3P<T>::subMR(int numOfShares,
-		T coef,
-		Z2nShareReplicated<T> &inShare,
-		Z2nShareReplicated<T> &outShare)
-{
-
-#pragma ivdep
-	if (m_partyId == 0) {
-		outShare = inShare;
-	}
-	else if (m_partyId == 1) {
-		for (int i=0; i<numOfShares; i++) {
-			outShare.elem1[i] = coef - inShare.elem1[i];
-			outShare.elem2[i] = coef - inShare.elem2[i];
-		}
-	}
-	else if (m_partyId == 2) {
-		for (int i=0; i<numOfShares; i++) {
-			outShare.elem1[i] = coef - inShare.elem1[i];
-			outShare.elem2[i] = inShare.elem2[i];
-		}
-	}
-
-	return true;
-}
-
-
-template <typename T>
-void NecProtocolPartyRingFor3P<T>::getInputFromOneParty(int partyID, T *value)
-{
-	T* shares[3];
-	shares[0] = new T[2];
-	shares[1] = new T[2];
-	shares[2] = new T[2];
-	if (m_partyId == partyID) {
-		//read from terminal
-		T input;
-		cout << "input --> " ; cin >> input;
-		shareOneInput(1, input, shares[0], shares[1], shares[2]);
-		value[0] = shares[partyID][0];
-		value[1] = shares[partyID][1];
-		mpcParty->Write(shares[m_nextParty], 2, m_nextParty);
-		mpcParty->Write(shares[m_prevParty], 2, m_prevParty);
-	}
-	else {
-		mpcParty->Read(value, 2, partyID);
-	}
-}
-
-template <typename T>
-bool NecProtocolPartyRingFor3P<T>::multShares(int numOfShares,
-		  Z2nShareReplicated<T> &x_shares,
-		  Z2nShareReplicated<T> &y_shares,
-		  Z2nShareReplicated<T> &xy_shares)
-{
-	if (x_shares.getNumOfShares() != numOfShares || y_shares.getNumOfShares() != numOfShares || xy_shares.getNumOfShares() != numOfShares)
-	{
-		return false;
-	}
-
-#pragma ivdep
-	for (int i=0; i<numOfShares; i++)
-	{
-		xy_shares.elem2[i] = (x_shares.elem1[i] * y_shares.elem1[i]) - (x_shares.elem2[i] * y_shares.elem2[i])
-				+ (prg_i->getRandomLong() - prg_iMinus1->getRandomLong());
-	}
-	mpcParty->Write(xy_shares.elem2, numOfShares, m_nextParty);
-	mpcParty->Read(xy_shares.elem1, numOfShares, m_prevParty);
-	for (int i=0; i<numOfShares; i++)
-	{
-		xy_shares.elem1[i] += xy_shares.elem2[i];
-	}
-
-	return true;
-}
-
-template <typename T>
-bool NecProtocolPartyRingFor3P<T>::load_share_immediate(Z2nIntReplicated<T> & values,
-														Z2nShareReplicated<T> &shares)
-{
-	int size = values.getNumOfData();
-	if (m_partyId == 0) {
-		for (int i=0; i<size; i++) {
-			shares.elem1[i] = 0;
-			shares.elem2[i] = 0;
-		}
-	}
-	else if (m_partyId == 1) {
-		for (int i=0; i<size; i++) {
-			shares.elem1[i] = values.elem[i];
-			shares.elem2[i] = values.elem[i];
-		}
-	}
-	else if (m_partyId == 2) {
-		for (int i=0; i<size; i++) {
-			shares.elem1[i] = values.elem[i];
-			shares.elem2[i] = 0;
+		for (size_t i=0; i<sz; ++i)
+		{
+			z2nshares1[i] = z2nvalues[i];
+			z2nshares2[i] = 0;
 		}
 	}
 	else {
-		cout << "ProtocolPartyRing - load_share_immediate failed: the party_id = " << m_partyId << "doesn't exists" << endl;
-		return false;
+		cout << "ProtocolPartyRing - makeShare failed: the party_id = " << m_partyId << "doesn't exists" << endl;
+		return -1;
 	}
 
-	return true;
+
+	return 0;
+}
+
+template <typename T>
+int NecProtocolPartyRingFor3P<T>::openShare(const int share_count, vector<T> &z2nshares1, vector<T> &z2nshares2, vector<T> &z2nopens)
+{
+	size_t sz = share_count;
+
+	uint64_t recBuf[sz];
+
+	mpcParty->Write(&z2nshares1[0], sz, m_nextParty);
+	mpcParty->Read(&recBuf[0], sz, m_prevParty);
+
+	for (size_t i=0; i<sz; ++i)
+	{
+		z2nopens[i] = z2nshares2[i] + recBuf[i];
+	}
+
+	return 0;
+}
+
+template <typename T>
+int NecProtocolPartyRingFor3P<T>::verify()
+{
+	return 1; // not implemented
+}
+
+template <typename T>
+int NecProtocolPartyRingFor3P<T>::multShares(const int share_count,
+													vector<T> &xshares1,
+													vector<T> &xshares2,
+													vector<T> &yshares1,
+													vector<T> &yshares2,
+													vector<T> &xyshares1,
+													vector<T> &xyshares2)
+{
+	size_t sz = share_count;
+
+	uint64_t recBuf[sz];
+
+	for (size_t i=0; i<sz; ++i)
+	{
+		xyshares2[i] = (xshares1[i] * yshares1[i]) - (xshares2[i] * yshares2[i]) + (prg_i->getRandomLong() - prg_iMinus1->getRandomLong());
+	}
+	mpcParty->Write(&xyshares2[0], sz, m_nextParty);
+	mpcParty->Read(&recBuf[0], sz, m_prevParty);
+
+	for(size_t i=0; i<sz; ++i)
+	{
+		xyshares1[i] = xyshares2[i] + recBuf[i];
+	}
+
+	return 0;
+}
+
+template <typename T>
+int NecProtocolPartyRingFor3P<T>::skewDecomp(const int bits_count, vector<T> &rshares1, vector<T> &rshares2,
+													vector<T> &b_x0_0, vector<T> &b_x0_1,
+													vector<T> &b_x1_0, vector<T> &b_x1_1,
+													vector<T> &b_x2_0, vector<T> &b_x2_1)
+{
+	size_t sz = bits_count;
+
+	for (size_t i=0; i<sz; ++i) {
+
+		for (size_t j=0; j<GFP_VECTOR; ++j)
+		{
+			if (m_partyId == 0)
+			{
+				// [x_0,i]^B
+				b_x0_0[i*GFP_VECTOR+j] = 0;
+				b_x0_1[i*GFP_VECTOR+j] = 0;
+				// [x_1,i]^B
+				b_x1_0[i*GFP_VECTOR+j] = ((rshares1[j] - rshares2[j]) >> i) & 1;
+				b_x1_1[i*GFP_VECTOR+j] = 0;
+				// [x_2,i]^B
+				b_x2_0[i*GFP_VECTOR+j] = 0;
+				b_x2_1[i*GFP_VECTOR+j] = (rshares2[j] >> i) & 1;
+			}
+			else if (m_partyId == 1)
+			{
+				// [x_0,i]^B
+				b_x0_0[i*GFP_VECTOR+j] = 0;
+				b_x0_1[i*GFP_VECTOR+j] = (rshares2[j] >> i) & 1;
+				// [x_1,i]^B
+				b_x1_0[i*GFP_VECTOR+j] = 0;
+				b_x1_1[i*GFP_VECTOR+j] = 0;
+				// [x_2,i]^B
+				b_x2_0[i*GFP_VECTOR+j] = ((rshares1[j] - rshares2[j]) >> i) & 1;
+				b_x2_1[i*GFP_VECTOR+j] = 0;
+			}
+			else if (m_partyId == 2)
+			{
+				// [x_0,i]^B
+				b_x0_0[i*GFP_VECTOR+j] = ((rshares1[j] - rshares2[j]) >> i) & 1;
+				b_x0_1[i*GFP_VECTOR+j] = 0;
+				// [x_1,i]^B
+				b_x1_0[i*GFP_VECTOR+j] = 0;
+				b_x1_1[i*GFP_VECTOR+j] = (rshares2[j] >> i) & 1;
+				// [x_2,i]^B
+				b_x2_0[i*GFP_VECTOR+j] = 0;
+				b_x2_1[i*GFP_VECTOR+j] = 0;
+			}
+			b_x0_0[i] ^= b_x0_1[i];
+			b_x1_0[i] ^= b_x1_1[i];
+			b_x2_0[i] ^= b_x2_1[i];
+		}
+	}
+
+	return 0;
+}
+
+template <typename T>
+int NecProtocolPartyRingFor3P<T>::openMPShare(const int size, vector<T> &z2nshares1, vector<T> &z2nshares2, vector<T> &z2nopens)
+{
+	size_t sz = size;
+	uint64_t recBuf[sz];
+
+	uint32_t size_comp = size;
+	uint32_t clr_reg_count;
+	clr_reg_count = size_comp / (GFP_LIMBS * GFP_VECTOR);
+
+	mpcParty->Write(&z2nshares1[0], sz, m_nextParty);
+	mpcParty->Read(&recBuf[0], sz, m_prevParty);
+
+	mp::uint256_t share_1, share_2, tmp, clr_val;
+	for(size_t i=0; i<clr_reg_count; ++i)
+	{
+		for(size_t j=0; j<GFP_VECTOR; ++j)
+		{
+			share_1=share_2=tmp=clr_val=0;
+			share_1  = (mp::uint256_t) recBuf[GFP_LIMBS*GFP_VECTOR*i+GFP_LIMBS*j+0];
+			tmp      = (mp::uint256_t) recBuf[GFP_LIMBS*GFP_VECTOR*i+GFP_LIMBS*j+1];
+			share_1 += (tmp << 64);
+			tmp      = (mp::uint256_t) recBuf[GFP_LIMBS*GFP_VECTOR*i+GFP_LIMBS*j+2];
+			share_1 += (tmp << 128);
+			tmp      = (mp::uint256_t) recBuf[GFP_LIMBS*GFP_VECTOR*i+GFP_LIMBS*j+3];
+			share_1 += (tmp << 192);
+
+			share_2  = (mp::uint256_t) z2nshares2[GFP_LIMBS*GFP_VECTOR*i+GFP_LIMBS*j+0];
+			tmp      = (mp::uint256_t) z2nshares2[GFP_LIMBS*GFP_VECTOR*i+GFP_LIMBS*j+1];
+			share_2 += (tmp << 64);
+			tmp      = (mp::uint256_t) z2nshares2[GFP_LIMBS*GFP_VECTOR*i+GFP_LIMBS*j+2];
+			share_2 += (tmp << 128);
+			tmp      = (mp::uint256_t) z2nshares2[GFP_LIMBS*GFP_VECTOR*i+GFP_LIMBS*j+3];
+			share_2 += (tmp << 192);
+
+#if(MP_RING_SIZE==256)
+			clr_val = share_2 + share_1;
+#else
+			clr_val = (share_2 + share_1) & mp_mod;
+#endif
+			z2nopens[GFP_LIMBS*GFP_VECTOR*i+GFP_LIMBS*j+0] = (uint64_t) (clr_val & 0xffffffffffffffff); // extract 64bits from LSB
+			z2nopens[GFP_LIMBS*GFP_VECTOR*i+GFP_LIMBS*j+1] = (uint64_t) ((clr_val >> 64) & 0xffffffffffffffff);
+			z2nopens[GFP_LIMBS*GFP_VECTOR*i+GFP_LIMBS*j+2] = (uint64_t) ((clr_val >> 128) & 0xffffffffffffffff);
+			z2nopens[GFP_LIMBS*GFP_VECTOR*i+GFP_LIMBS*j+3] = (uint64_t) ((clr_val >> 192) & 0xffffffffffffffff);
+		}
+	}
+
+	return 0;
+}
+
+template <typename T>
+int NecProtocolPartyRingFor3P<T>::multMPShares(const int share_count,
+													vector<T> &xshares1,
+													vector<T> &xshares2,
+													vector<T> &yshares1,
+													vector<T> &yshares2,
+													vector<T> &xyshares1,
+													vector<T> &xyshares2)
+{
+	size_t sz = share_count;
+	uint64_t recBuf[sz];
+
+	uint32_t size_comp = share_count;
+	uint32_t sh_reg_count;
+	sh_reg_count = size_comp/(GFP_LIMBS*GFP_VECTOR);
+
+	mp::uint256_t x1_tmp, y1_tmp, xy1_tmp, x2_tmp, y2_tmp, xy2_tmp, prg_i_tmp, prg_i_minus1_tmp, tmp_for_shift, res1_tmp, res2_tmp;
+
+	for (size_t i=0; i<sh_reg_count; ++i)
+	{
+		for(size_t j=0; j<GFP_VECTOR; ++j)
+		{
+			x1_tmp = y1_tmp = xy1_tmp = x2_tmp = y2_tmp = xy2_tmp = prg_i_tmp = prg_i_minus1_tmp = tmp_for_shift = res1_tmp = res2_tmp = 0;
+			for(size_t k=0; k<GFP_LIMBS; ++k)
+			{
+				tmp_for_shift = (mp::uint256_t) xshares1[i*GFP_LIMBS*GFP_VECTOR+j*GFP_LIMBS+k];
+				x1_tmp += (tmp_for_shift << (64 * k));
+				tmp_for_shift = (mp::uint256_t) yshares1[i*GFP_LIMBS*GFP_VECTOR+j*GFP_LIMBS+k];
+				y1_tmp += (tmp_for_shift << (64 * k));
+				tmp_for_shift = (mp::uint256_t) xshares2[i*GFP_LIMBS*GFP_VECTOR+j*GFP_LIMBS+k];
+				x2_tmp += (tmp_for_shift << (64 * k));
+				tmp_for_shift = (mp::uint256_t) yshares2[i*GFP_LIMBS*GFP_VECTOR+j*GFP_LIMBS+k];
+				y2_tmp += (tmp_for_shift << (64 * k));
+				tmp_for_shift = (mp::uint256_t) prg_i->getRandomLong();
+				prg_i_tmp += (tmp_for_shift << (64 * k));
+				tmp_for_shift = (mp::uint256_t) prg_iMinus1->getRandomLong();
+				prg_i_minus1_tmp += (tmp_for_shift << (64 * k));
+			}
+#if(MP_RING_SIZE==256)
+			xy1_tmp = x1_tmp * y1_tmp;
+			xy2_tmp = x2_tmp * y2_tmp;
+			res2_tmp = xy1_tmp - xy2_tmp + (prg_i_tmp - prg_i_minus1_tmp);
+			for(size_t k=0; k<GFP_LIMBS; ++k)
+			{
+				xyshares2[i*GFP_LIMBS*GFP_VECTOR+j*GFP_LIMBS+k] = (uint64_t) ((res2_tmp >> (64 * k)) & 0xffffffffffffffff);
+			}
+#else
+			xy1_tmp = x1_tmp * y1_tmp;
+			xy2_tmp = x2_tmp * y2_tmp;
+			res2_tmp = (xy1_tmp - xy2_tmp + (prg_i_tmp - prg_i_minus1_tmp)) & mp_mod;
+			for(size_t k=0; k<GFP_LIMBS; ++k)
+			{
+				xyshares2[i*GFP_LIMBS*GFP_VECTOR+j*GFP_LIMBS+k] = (uint64_t) ((res2_tmp >> (64 * k)) & 0xffffffffffffffff);
+			}
+#endif
+		}
+	}
+	mpcParty->Write(&xyshares2[0], sz, m_nextParty);
+	mpcParty->Read(&recBuf[0], sz, m_prevParty);
+
+	for (size_t i=0; i<sh_reg_count; ++i)
+	{
+		for(size_t j=0; j<GFP_VECTOR; ++j)
+		{
+			tmp_for_shift = res1_tmp = res2_tmp = 0;
+			for(size_t k=0; k<GFP_LIMBS; ++k)
+			{
+				tmp_for_shift = (mp::uint256_t) xyshares2[i*GFP_LIMBS*GFP_VECTOR+j*GFP_LIMBS+k];
+				res2_tmp += (tmp_for_shift << (64 * k));
+				tmp_for_shift = (mp::uint256_t) recBuf[i*GFP_LIMBS*GFP_VECTOR+j*GFP_LIMBS+k];
+				res1_tmp += (tmp_for_shift << (64 * k));
+			}
+#if(MP_RING_SIZE==256)
+			res1_tmp += res2_tmp;
+#else
+			res1_tmp = (res1_tmp + res2_tmp) & mp_mod;
+#endif
+			for(size_t k=0; k<GFP_LIMBS; ++k)
+			{
+				xyshares1[i*GFP_LIMBS*GFP_VECTOR+j*GFP_LIMBS+k] = (uint64_t) ((res1_tmp >> (64 * k)) & 0xffffffffffffffff);
+			}
+		}
+	}
+	return 0;
+}
+
+template <typename T>
+int NecProtocolPartyRingFor3P<T>::MP_skewDecomp(const int bits_count, vector<T> &rshares1, vector<T> &rshares2,
+													vector<T> &b_x0_0, vector<T> &b_x0_1,
+													vector<T> &b_x1_0, vector<T> &b_x1_1,
+													vector<T> &b_x2_0, vector<T> &b_x2_1)
+{
+	size_t sz = bits_count;
+
+	mp::uint256_t diff[GFP_VECTOR], share2[GFP_VECTOR];
+	for(size_t i=0; i<GFP_VECTOR; ++i) {
+		mp::uint256_t val1,tmp;
+		val1=tmp=0;
+		val1 = (mp::uint256_t) rshares1[i*GFP_LIMBS+0];
+		tmp = (mp::uint256_t) rshares1[i*GFP_LIMBS+1];
+		val1 += (tmp << 64);
+		tmp = (mp::uint256_t) rshares1[i*GFP_LIMBS+2];
+		val1 += (tmp << 128);
+		tmp = (mp::uint256_t) rshares1[i*GFP_LIMBS+3];
+		val1 += (tmp << 192);
+		share2[i] = (mp::uint256_t) rshares2[i*GFP_LIMBS+0];
+		tmp = (mp::uint256_t) rshares2[i*GFP_LIMBS+1];
+		share2[i] += (tmp << 64);
+		tmp = (mp::uint256_t) rshares2[i*GFP_LIMBS+2];
+		share2[i] += (tmp << 128);
+		tmp = (mp::uint256_t) rshares2[i*GFP_LIMBS+3];
+		share2[i] += (tmp << 192);
+
+#if(MP_RING_SIZE==256)
+		diff[i] = val1 - share2[i];
+#else
+		diff[i] = (val1 - share2[i]) & mp_mod;
+#endif
+	}
+
+	for (size_t i=0; i<sz; ++i) {
+
+		for (size_t j=0; j<GFP_VECTOR; ++j)
+		{
+			if (m_partyId == 0)
+			{
+				// [x_0,i]^B
+				b_x0_0[i*GFP_VECTOR+j] = 0;
+				b_x0_1[i*GFP_VECTOR+j] = 0;
+				// [x_1,i]^B
+				b_x1_0[i*GFP_VECTOR+j] = (uint64_t) ((diff[j] >> i) & 1);
+				b_x1_1[i*GFP_VECTOR+j] = 0;
+				// [x_2,i]^B
+				b_x2_0[i*GFP_VECTOR+j] = 0;
+				b_x2_1[i*GFP_VECTOR+j] = (uint64_t) ((share2[j]>> i) & 1);
+			}
+			else if (m_partyId == 1)
+			{
+				// [x_0,i]^B
+				b_x0_0[i*GFP_VECTOR+j] = 0;
+				b_x0_1[i*GFP_VECTOR+j] = (uint64_t) ((share2[j]>> i) & 1);
+				// [x_1,i]^B
+				b_x1_0[i*GFP_VECTOR+j] = 0;
+				b_x1_1[i*GFP_VECTOR+j] = 0;
+				// [x_2,i]^B
+				b_x2_0[i*GFP_VECTOR+j] = (uint64_t) ((diff[j] >> i) & 1);
+				b_x2_1[i*GFP_VECTOR+j] = 0;
+			}
+			else if (m_partyId == 2)
+			{
+				// [x_0,i]^B
+				b_x0_0[i*GFP_VECTOR+j] = (uint64_t) ((diff[j] >> i) & 1);
+				b_x0_1[i*GFP_VECTOR+j] = 0;
+				// [x_1,i]^B
+				b_x1_0[i*GFP_VECTOR+j] = 0;
+				b_x1_1[i*GFP_VECTOR+j] = (uint64_t) ((share2[j]>> i) & 1);
+				// [x_2,i]^B
+				b_x2_0[i*GFP_VECTOR+j] = 0;
+				b_x2_1[i*GFP_VECTOR+j] = 0;
+			}
+			b_x0_0[i] ^= b_x0_1[i];
+			b_x1_0[i] ^= b_x1_1[i];
+			b_x2_0[i] ^= b_x2_1[i];
+
+		}
+	}
+
+	return 0;
 }
 
 #endif // NEC_PROTOCOLPARTY_H_

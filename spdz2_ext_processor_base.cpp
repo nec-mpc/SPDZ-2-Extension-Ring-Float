@@ -1,4 +1,5 @@
 #include "spdz2_ext_processor_base.h"
+#include "spdzext_width_defs.h"
 
 #include <iostream>
 #include <stdio.h>
@@ -6,852 +7,296 @@
 #include <errno.h>
 #include <syslog.h>
 
+#include <string>
+#include <sstream>
+#include <iomanip>
+
+#include <log4cpp/Category.hh>
+#include <log4cpp/FileAppender.hh>
+#include <log4cpp/SimpleLayout.hh>
+#include <log4cpp/RollingFileAppender.hh>
+#include <log4cpp/SimpleLayout.hh>
+#include <log4cpp/BasicLayout.hh>
+#include <log4cpp/PatternLayout.hh>
+
+static const char tsk0[] = "setup";
+static const char tsk1[] = "offline";
+static const char tsk2[] = "online";
+
 using namespace std;
 
 //***********************************************************************************************//
-void * spdz2_ext_processor_proc(void * arg)
-{
-	spdz2_ext_processor_base * processor = (spdz2_ext_processor_base *)arg;
-	processor->run();
-}
-//***********************************************************************************************//
-const int spdz2_ext_processor_base::op_code_open = 100;
-const int spdz2_ext_processor_base::op_code_triple = 101;
-const int spdz2_ext_processor_base::op_code_offline = 102;
-const int spdz2_ext_processor_base::op_code_input = 103;
-const int spdz2_ext_processor_base::op_code_verify = 104;
-const int spdz2_ext_processor_base::op_code_input_asynch = 105;
-const int spdz2_ext_processor_base::op_code_mult = 106;
-const int spdz2_ext_processor_base::op_code_share_immediates = 107;
-const int spdz2_ext_processor_base::op_code_share_immediate = 108;
-
-//***********************************************************************************************//
 spdz2_ext_processor_base::spdz2_ext_processor_base()
- : runner(0), run_flag(false), party_id(-1), offline_size(-1), num_of_parties(0)
- , offline_success(false)
- , start_open_on(false), do_verify_open(false), open_success(false)
- , pa(NULL), pb(NULL), pc(NULL), triple_success(false)
- , input_party_id(-1), input_success(false), p_input_value(NULL)
- , verification_error(NULL), verification_on(false), verify_success(false)
- , input_asynch_on(false), intput_asynch_party_id(-1), num_of_inputs(0), input_asynch_success(false)
- , mult_on(false), mult_success(false)
- , share_immediates_on(false), share_immediates_success(false)
- , p_immediate_share(NULL), share_immediate_success(false)
 {
-	pthread_mutex_init(&q_lock, NULL);
-	sem_init(&task, 0, 0);
-	sem_init(&open_done, 0, 0);
-	sem_init(&triple_done, 0, 0);
-	sem_init(&offline_done, 0, 0);
-	sem_init(&input_done, 0, 0);
-	sem_init(&verify_done, 0, 0);
-	sem_init(&input_asynch_done, 0, 0);
-	sem_init(&mult_done, 0, 0);
-	sem_init(&share_immediates_done, 0, 0);
-	sem_init(&share_immediate_done, 0, 0);
-
-	openlog("spdz_ext_biu", LOG_NDELAY|LOG_PID, LOG_USER);
-	setlogmask(LOG_UPTO(LOG_DEBUG));
 }
 
 //***********************************************************************************************//
 spdz2_ext_processor_base::~spdz2_ext_processor_base()
 {
-	pthread_mutex_destroy(&q_lock);
-	sem_destroy(&task);
-	sem_destroy(&open_done);
-	sem_destroy(&triple_done);
-	sem_destroy(&offline_done);
-	sem_destroy(&input_done);
-	sem_destroy(&verify_done);
-	sem_destroy(&input_asynch_done);
-	sem_destroy(&mult_done);
-	sem_destroy(&share_immediates_done);
-	sem_destroy(&share_immediate_done);
-
-	closelog();
 }
 
 //***********************************************************************************************//
-int spdz2_ext_processor_base::start(const int pid, const int num_of_parties_, const char * field, const int offline)
+int spdz2_ext_processor_base::init(const int pid, const int num_of_parties, const int thread_id, const char * field,
+		 	 	 	 	 	 	   const int open_count, const int mult_count, const int bits_count, int log_level)
 {
-	if(run_flag)
+	m_pid = pid;
+	m_nparties = num_of_parties;
+	m_thid = thread_id;
+	if(0 != init_log(log_level))
 	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::start: this processor is already started");
+		syslog(LOG_ERR, "%s: init_log() failure.", __FUNCTION__);
 		return -1;
 	}
-
-	char sz[64];
-	snprintf(sz, 64, "party_%d_input.txt", pid);
-	input_file = sz;
-
-	party_id = pid;
-	offline_size = offline;
-	num_of_parties = num_of_parties_;
-
-	if(0 != init_protocol())
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::start: protocol initialization failure.");
-		return -1;
-	}
-
-	run_flag = true;
-	int result = pthread_create(&runner, NULL, spdz2_ext_processor_proc, this);
-	if(0 != result)
-	{
-		char errmsg[512];
-		syslog(LOG_ERR, "spdz2_ext_processor_base::start: pthread_create() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-		run_flag = false;
-		return -1;
-	}
-
-//	syslog(LOG_NOTICE, "spdz2_ext_processor_base::start: pid %d", party_id);
 	return 0;
 }
 
 //***********************************************************************************************//
-int spdz2_ext_processor_base::stop(const time_t timeout_sec)
+int spdz2_ext_processor_base::init_log(int log_level)
 {
-	if(!run_flag)
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::stop this processor is not running.");
-		return -1;
-	}
+	static const char the_layout[] = "%d{%y-%m-%d %H:%M:%S.%l}| %-6p | %-15c | %m%n";
 
-	run_flag = false;
-	void * return_code = NULL;
+	std::string log_file = "/var/log/spdz/";
+	log_file += get_log_file();
+	m_logcat = get_log_category();
 
-	struct timespec timeout;
-	clock_gettime(CLOCK_REALTIME, &timeout);
-	timeout.tv_sec += timeout_sec;
+    log4cpp::Layout * log_layout = NULL;
+    log4cpp::Appender * appender = new log4cpp::RollingFileAppender("rlf.appender", log_file.c_str(), 10*1024*1024, 10);
 
-	int result = pthread_timedjoin_np(runner, &return_code, &timeout);
-	if(0 != result)
-	{
-		char errmsg[512];
-		syslog(LOG_ERR, "spdz2_ext_processor_base::stop: pthread_timedjoin_np() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-		return -1;
-	}
+    bool pattern_layout = false;
+    try
+    {
+        log_layout = new log4cpp::PatternLayout();
+        ((log4cpp::PatternLayout *)log_layout)->setConversionPattern(the_layout);
+        appender->setLayout(log_layout);
+        pattern_layout = true;
+    }
+    catch(...)
+    {
+        pattern_layout = false;
+    }
 
-	delete_protocol();
+    if(!pattern_layout)
+    {
+        log_layout = new log4cpp::BasicLayout();
+        appender->setLayout(log_layout);
+    }
 
-//	syslog(LOG_NOTICE, "spdz2_ext_processor_base::stop: pid %d", party_id);
-	return 0;
+    log4cpp::Category::getInstance(m_logcat).addAppender(appender);
+    log4cpp::Category::getInstance(m_logcat).setPriority((log4cpp::Priority::PriorityLevel)log_level);
+    log4cpp::Category::getInstance(m_logcat).notice("log start");
+    return 0;
 }
 
 //***********************************************************************************************//
-void spdz2_ext_processor_base::run()
+int spdz2_ext_processor_base::load_inputs()
 {
-	long timeout_ns = 200 /*ms*/ * 1000 /*us*/ * 1000 /*ns*/;
-	while(run_flag)
+	std::list<std::string> party_input_specs;
+	if(0 != load_party_input_specs(party_input_specs))
 	{
-		struct timespec timeout;
-		clock_gettime(CLOCK_REALTIME, &timeout);
-		timeout.tv_nsec += timeout_ns;
-		timeout.tv_sec += timeout.tv_nsec / 1000000000;
-		timeout.tv_nsec = timeout.tv_nsec % 1000000000;
+		LC(m_logcat).error("%s: failed loading the party input specs", __FUNCTION__);
+		return -1;
+	}
+	LC(m_logcat).debug("%s: party input specs loaded.", __FUNCTION__);
 
-		int result = sem_timedwait(&task, &timeout);
-		if(0 == result)
+	for(std::list<std::string>::const_iterator i = party_input_specs.begin(); i != party_input_specs.end(); ++i)
+	{
+		if(0 != load_party_inputs(*i))
 		{
-			int op_code = pop_task();
-//			syslog(LOG_NOTICE, "spdz2_ext_processor_base::run: op_code %d", op_code);
-			switch(op_code)
+			LC(m_logcat).error("%s: failed loading party input by spec [%s]", __FUNCTION__, i->c_str());
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+//***********************************************************************************************//
+int spdz2_ext_processor_base::load_party_input_specs(std::list<std::string> & party_input_specs)
+{
+	static const char spaces[] = " \t\n\v\f\r";
+	static const char common_inputs_spec[] = "parties_inputs.txt";
+
+	party_input_specs.clear();
+	FILE * pf = fopen(common_inputs_spec, "r");
+	if(NULL != pf)
+	{
+		char sz[128];
+		while(NULL != fgets(sz, 128, pf))
+		{
+			std::string str = sz;
+			if(str.find('#') != std::string::npos)
+				continue;
+			for(std::string::size_type n = str.find_first_of(spaces); n != std::string::npos; n = str.find_first_of(spaces, n))
+				str.erase(n, 1);
+			if(str.empty())
+				continue;
+			party_input_specs.push_back(str);
+		}
+		fclose(pf);
+	}
+	else
+	{
+		LC(m_logcat).error("%s: failed to open [%s].", __FUNCTION__, common_inputs_spec);
+		return -1;
+	}
+	return (party_input_specs.empty())? -1: 0;
+}
+
+//***********************************************************************************************//
+int spdz2_ext_processor_base::load_party_inputs(const std::string & party_input_spec)
+{
+	LC(m_logcat).debug("%s: party_input_spec = [%s].", __FUNCTION__, party_input_spec.c_str());
+	std::string::size_type pos = party_input_spec.find(',');
+	if(std::string::npos != pos)
+	{
+		int pid = (int)strtol(party_input_spec.substr(0, pos).c_str(), NULL, 10);
+		size_t count = (size_t)strtol(party_input_spec.substr(pos+1).c_str(), NULL, 10);
+		LC(m_logcat).debug("%s: party_input_spec: id=%d; count=%lu;", __FUNCTION__, pid, count);
+		if(0 < count)
+			return load_party_inputs(pid, count);
+		else
+			return 0;
+	}
+	else
+	{
+		LC(m_logcat).error("%s: invalid party input spec format [%s]", __FUNCTION__, party_input_spec.c_str());
+		return -1;
+	}
+}
+
+//***********************************************************************************************//
+int spdz2_ext_processor_base::load_party_inputs(const int pid, const size_t count)
+{
+	return (pid == this->m_pid)? load_self_party_inputs(count): load_peer_party_inputs(pid, count);
+}
+
+//***********************************************************************************************//
+int spdz2_ext_processor_base::load_self_party_inputs(const size_t count)
+{
+	int result = -1;
+	uint64_t * clr_values = new uint64_t[count * GFP_LIMBS];
+	memset(clr_values, 0, count * GFP_BYTES);
+	if(0 == load_clr_party_inputs(clr_values, count))
+		result = load_peer_party_inputs(m_pid, count, clr_values);
+	else
+		LC(m_logcat).error("%s: failed loading clear inputs.", __FUNCTION__);
+	delete clr_values;
+	return result;
+}
+
+//***********************************************************************************************//
+int spdz2_ext_processor_base::load_peer_party_inputs(const int pid, const size_t count, const uint64_t * clr_values)
+{
+	int result = -1;
+	shared_input_t party_inputs;
+	party_inputs.share_count = count;
+	party_inputs.share_index = 0;
+	party_inputs.shared_values = new uint64_t[party_inputs.share_count * 2 * GFP_LIMBS];
+	memset(party_inputs.shared_values, 0, party_inputs.share_count * 2 * GFP_BYTES);
+
+	if(0 == closes(pid, count, (m_pid == pid)? clr_values: NULL, party_inputs.shared_values))
+	{
+		if(m_shared_inputs.insert(std::pair<int, shared_input_t>(pid, party_inputs)).second)
+			result = 0;
+		else
+		{
+			delete party_inputs.shared_values;
+			LC(m_logcat).error("%s: failed to map-insert shared inputs for pid=%d.", __FUNCTION__, pid);
+		}
+	}
+	else
+	{
+		delete party_inputs.shared_values;
+		LC(m_logcat).error("%s: share_immediates() failed for pid=%d.", __FUNCTION__, pid);
+	}
+	return result;
+}
+
+//***********************************************************************************************//
+int spdz2_ext_processor_base::load_clr_party_inputs(uint64_t * clr_values, const size_t count)
+{
+//	int result = -1;
+//	char sz[128];
+//	snprintf(sz, 128, "party_%d_input.txt", m_pid);
+//	std::string input_file = sz;
+//
+//	FILE * pf = fopen(input_file.c_str(), "r");
+//	if(NULL != pf)
+//	{
+//		size_t clr_values_idx = 0;
+//		mpz_t t;
+//		mpz_init(t);
+//		while(NULL != fgets(sz, 128, pf))
+//		{
+//			LC(m_logcat).debug("%s: party input [%s] line: [%s];", __FUNCTION__, input_file.c_str(), sz);
+//			mpz_set_str(t, sz, 10);
+//			mpz_export(clr_values + 2*clr_values_idx, NULL, -1, 8, 0, 0, t);
+//			if(++clr_values_idx >= count*GFP_VECTOR)
+//				break;
+//		}
+//		mpz_clear(t);
+//		fclose(pf);
+//
+//		if(count*GFP_VECTOR == clr_values_idx)
+//			result = 0;
+//		else
+//			LC(m_logcat).error("%s: not enough inputs in file [%s]; required %lu*%u; file has %lu;",
+//							   __FUNCTION__, input_file.c_str(), count, GFP_VECTOR, clr_values_idx);
+//	}
+//	return result;
+	return 0;
+}
+
+//***********************************************************************************************//
+
+int spdz2_ext_processor_base::input(const int input_of_pid, uint64_t * input_value)
+{
+	int result = -1;
+	std::map< int , shared_input_t >::iterator i = m_shared_inputs.find(input_of_pid);
+	if(m_shared_inputs.end() != i)
+	{
+		if(0 < i->second.share_count)
+		{
+			if(i->second.share_count > i->second.share_index)
 			{
-			case op_code_open:
-				exec_open();
-				break;
-			case op_code_triple:
-				exec_triple();
-				break;
-			case op_code_offline:
-				exec_offline();
-				break;
-			case op_code_input:
-				exec_input();
-				break;
-			case op_code_verify:
-				exec_verify();
-				break;
-			case op_code_input_asynch:
-				exec_input_asynch();
-				break;
-			case op_code_mult:
-				exec_mult();
-				break;
-			case op_code_share_immediates:
-				exec_share_immediates();
-				break;
-			case op_code_share_immediate:
-				exec_share_immediate();
-				break;
-			default:
-				syslog(LOG_WARNING, "spdz2_ext_processor_base::run: unsupported op_code %d", op_code);
-				break;
+				memcpy(input_value, i->second.shared_values + (2 * GFP_LIMBS * i->second.share_index++), GFP_BYTES);
+				memset(input_value + GFP_LIMBS, 0, GFP_BYTES);
+				result = 0;
 			}
+			else
+				LC(m_logcat).error("%s: input exhausted for pid %d.", __FUNCTION__, input_of_pid);
 		}
-	}
-}
-
-//***********************************************************************************************//
-int spdz2_ext_processor_base::push_task(const int op_code)
-{
-	int result = pthread_mutex_lock(&q_lock);
-
-	if(0 != result)
-	{
-		char errmsg[512];
-		syslog(LOG_ERR, "spdz2_ext_processor_base::push_task: pthread_mutex_lock() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-		return -1;
-	}
-
-	task_q.push_back(op_code);
-
-	sem_post(&task);
-	result = pthread_mutex_unlock(&q_lock);
-
-
-	if(0 != result)
-	{
-		char errmsg[512];
-		syslog(LOG_ERR, "spdz2_ext_processor_base::push_task: pthread_mutex_unlock() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-	}
-//	syslog(LOG_NOTICE, "spdz2_ext_processor_base::push_task: op_code %d", op_code);
-	return 0;
-}
-
-//***********************************************************************************************//
-int spdz2_ext_processor_base::pop_task()
-{
-	int op_code = -1;
-	int result = pthread_mutex_lock(&q_lock);
-	if(0 == result)
-	{
-		if(!task_q.empty())
-		{
-			op_code = *task_q.begin();
-			task_q.pop_front();
-		}
-
-		result = pthread_mutex_unlock(&q_lock);
-		if(0 != result)
-		{
-			char errmsg[512];
-			syslog(LOG_ERR, "spdz2_ext_processor_base::pop_task: pthread_mutex_unlock() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-		}
+		else
+			LC(m_logcat).error("%s: no input loaded for pid %d.", __FUNCTION__, input_of_pid);
 	}
 	else
-	{
-		char errmsg[512];
-		syslog(LOG_ERR, "spdz2_ext_processor_base::pop_task: pthread_mutex_lock() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-	}
-
-//	syslog(LOG_NOTICE, "spdz2_ext_processor_base::pop_task: op_code %d", op_code);
-	return op_code;
+		LC(m_logcat).error("%s: no input for pid %d.", __FUNCTION__, input_of_pid);
+	return result;
 }
 
 //***********************************************************************************************//
-int spdz2_ext_processor_base::offline(const int /*offline_size*/, const time_t timeout_sec)
-{
-	/*
-	 * In BIU implementation the offline size is set at the protocol construction
-	 * the call to offline will reallocate the same size of offline
-	 */
-	offline_success = false;
-	if(0 != push_task(spdz2_ext_processor_base::op_code_offline))
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::offline: failed pushing an offline task to queue.");
-		return -1;
-	}
-
-	struct timespec timeout;
-	clock_gettime(CLOCK_REALTIME, &timeout);
-	timeout.tv_sec += timeout_sec;
-
-	int result = sem_timedwait(&offline_done, &timeout);
-	if(0 != result)
-	{
-		result = errno;
-		char errmsg[512];
-		syslog(LOG_ERR, "spdz2_ext_processor_base::offline: sem_timedwait() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-		return -1;
-	}
-
-	return (offline_success)? 0: -1;
-}
-
-//***********************************************************************************************//
-void spdz2_ext_processor_base::exec_offline()
-{
-	offline_success = protocol_offline();
-	sem_post(&offline_done);
-}
-
-//***********************************************************************************************//
-int spdz2_ext_processor_base::start_open(int count, const SPDZEXT_VALTYPE * share_values, SPDZEXT_VALTYPE * open_values, int verify)
-{
-	if(start_open_on)
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::start_open: open is already started (a stop_open() call is required).");
-		return -1;
-	}
-	start_open_on = true;
-	open_success = false;
-
-	dest = open_values;
-
-	shares.assign(share_values, share_values + count);
-
-//	do_verify_open = (verify != 0)? true: false;
-
-	if(0 != push_task(spdz2_ext_processor_base::op_code_open))
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::start_open: failed pushing an open task to queue.");
-		start_open_on = false;
-		return -1;
-	}
-
-	return 0;
-}
-//int spdz2_ext_processor_base::start_open(const size_t share_count, const u_int64_t * share_values, int verify)
+//int spdz2_ext_processor_base::input(const int input_of_pid, const size_t num_of_inputs, uint64_t * inputs)
 //{
-//	if(start_open_on)
+//	int result = -1;
+//	std::map< int , shared_input_t >::iterator i = m_shared_inputs.find(input_of_pid);
+//	if(m_shared_inputs.end() != i)
 //	{
-//		syslog(LOG_ERR, "spdz2_ext_processor_base::start_open: open is already started (a stop_open() call is required).");
-//		return -1;
-//	}
-//	start_open_on = true;
-//	open_success = false;
-//
-//	shares.assign(share_values, share_values + share_count);
-//	do_verify_open = (verify != 0)? true: false;
-//	if(0 != push_task(spdz2_ext_processor_base::op_code_open))
-//	{
-//		syslog(LOG_ERR, "spdz2_ext_processor_base::start_open: failed pushing an open task to queue.");
-//		start_open_on = false;
-//		return -1;
-//	}
-//
-//	return 0;
-//}
-
-//***********************************************************************************************//
-int spdz2_ext_processor_base::stop_open(const time_t timeout_sec)
-{
-	if(!start_open_on)
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_open: open is not started.");
-		return -1;
-	}
-	start_open_on = false;
-
-	struct timespec timeout;
-	clock_gettime(CLOCK_REALTIME, &timeout);
-	timeout.tv_sec += timeout_sec;
-
-	int result = sem_timedwait(&open_done, &timeout);
-	if(0 != result)
-	{
-		result = errno;
-		char errmsg[512];
-		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_open: sem_timedwait() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-		return -1;
-	}
-
-	if(open_success)
-	{
-		if(!opens.empty())
-		{
-//			dest = new SPDZEXT_VALTYPE[opens.size()]; // dest is allocated in spdzext.cpp
-			memcpy(dest, &opens[0], (opens.size())*sizeof(SPDZEXT_VALTYPE));
-
-			opens.clear();
-		}
-		return 0;
-	}
-	else
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_open: open failed.");
-		return -1;
-	}
-}
-//
-//int spdz2_ext_processor_base::stop_open(size_t * open_count, u_int64_t ** open_values, const time_t timeout_sec)
-//{
-//	if(!start_open_on)
-//	{
-//		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_open: open is not started.");
-//		return -1;
-//	}
-//	start_open_on = false;
-//
-//	*open_count = 0;
-//	*open_values = NULL;
-//
-//	struct timespec timeout;
-//	clock_gettime(CLOCK_REALTIME, &timeout);
-//	timeout.tv_sec += timeout_sec;
-//
-//	int result = sem_timedwait(&open_done, &timeout);
-//	if(0 != result)
-//	{
-//		result = errno;
-//		char errmsg[512];
-//		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_open: sem_timedwait() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-//		return -1;
-//	}
-//
-//	if(open_success)
-//	{
-//		if(!opens.empty())
+//		if(0 < i->second.share_count)
 //		{
-//			*open_values = new u_int64_t[*open_count = opens.size()];
-//			memcpy(*open_values, &opens[0], (*open_count)*sizeof(u_int64_t));
-//			opens.clear();
+//			if((i->second.share_count - i->second.share_index) >= num_of_inputs)
+//			{
+//				memcpy(inputs, i->second.shared_values + (2 * GFP_LIMBS * i->second.share_index++), GFP_BYTES * 2 * num_of_inputs);
+//				result = 0;
+//			}
+//			else
+//				LC(m_logcat).error("%s: input exhausted for pid %d.", __FUNCTION__, input_of_pid);
 //		}
-//		return 0;
+//		else
+//			LC(m_logcat).error("%s: no input loaded for pid %d.", __FUNCTION__, input_of_pid);
 //	}
 //	else
-//	{
-//		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_open: open failed.");
-//		return -1;
-//	}
+//		LC(m_logcat).error("%s: no input for pid %d.", __FUNCTION__, input_of_pid);
+//	return result;
 //}
-
-
-//***********************************************************************************************//
-void spdz2_ext_processor_base::exec_open()
-{
-	open_success = protocol_open();
-	sem_post(&open_done);
-}
-
-//***********************************************************************************************//
-int spdz2_ext_processor_base::triple(u_int64_t * a, u_int64_t * b, u_int64_t * c, const time_t timeout_sec)
-{
-	pa = a;
-	pb = b;
-	pc = c;
-	triple_success = false;
-
-	if(0 != push_task(spdz2_ext_processor_base::op_code_triple))
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::triple: failed pushing a triple task to queue.");
-		return -1;
-	}
-
-	struct timespec timeout;
-	clock_gettime(CLOCK_REALTIME, &timeout);
-	timeout.tv_sec += timeout_sec;
-
-	int result = sem_timedwait(&triple_done, &timeout);
-	if(0 != result)
-	{
-		result = errno;
-		char errmsg[512];
-		syslog(LOG_ERR, "spdz2_ext_processor_base::triple: sem_timedwait() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-		return -1;
-	}
-
-	pa = pb = pc = NULL;
-	return (triple_success)? 0: -1;
-}
-
-//***********************************************************************************************//
-void spdz2_ext_processor_base::exec_triple()
-{
-	triple_success = protocol_triple();
-	sem_post(&triple_done);
-}
-
-//***********************************************************************************************//
-int spdz2_ext_processor_base::input(const int input_of_pid, int count, SPDZEXT_VALTYPE * input_values, SPDZEXT_VALTYPE * output_values)
-{
-	num_input = count;
-	p_input_value  = input_values;
-	p_output_value = output_values;
-	input_party_id = input_of_pid;
-	input_success = false;
-
-	if(0 != push_task(spdz2_ext_processor_base::op_code_input))
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::input: failed pushing an input task to queue.");
-		return -1;
-	}
-
-	//No timeout waiting for input - the user might take long to enter data
-
-	int result = sem_wait(&input_done);
-	if(0 != result)
-	{
-		result = errno;
-		char errmsg[512];
-		syslog(LOG_ERR, "spdz2_ext_processor_base::input: sem_wait() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-		return -1;
-	}
-
-	p_input_value = NULL;
-	input_party_id = -1;
-
-	return (input_success)? 0: -1;
-}
-
-
-//***********************************************************************************************//
-void spdz2_ext_processor_base::exec_input()
-{
-	input_success = protocol_input();
-	sem_post(&input_done);
-}
-
-//***********************************************************************************************//
-int spdz2_ext_processor_base::start_verify(int * error)
-{
-	if(verification_on)
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::start_verify: verify is already started (a stop_verify() call is required).");
-		return -1;
-	}
-	verification_on = true;
-	verify_success = false;
-	verification_error = error;
-	if(0 != push_task(spdz2_ext_processor_base::op_code_verify))
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::start_verify: failed pushing a verify task to queue.");
-		return -1;
-	}
-	return 0;
-}
-
-//***********************************************************************************************//
-int spdz2_ext_processor_base::stop_verify(const time_t timeout_sec)
-{
-	if(!verification_on)
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_verify: verify is not started.");
-		return -1;
-	}
-	verification_on = false;
-
-	struct timespec timeout;
-	clock_gettime(CLOCK_REALTIME, &timeout);
-	timeout.tv_sec += timeout_sec;
-
-	int result = sem_timedwait(&verify_done, &timeout);
-	if(0 != result)
-	{
-		result = errno;
-		char errmsg[512];
-		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_verify: sem_timedwait() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-		return -1;
-	}
-
-	verification_error = NULL;
-	return (verify_success)? 0: -1;
-}
-
-//***********************************************************************************************//
-void spdz2_ext_processor_base::exec_verify()
-{
-	*verification_error = 0;
-	verify_success = true;
-	sem_post(&verify_done);
-}
-
-//***********************************************************************************************//
-int spdz2_ext_processor_base::start_input(const int input_of_pid, const size_t num_of_inputs_)
-{
-	if(input_asynch_on)
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::start_input: asynch input is already started (a stop_input() call is required).");
-		return -1;
-	}
-	input_asynch_on = true;
-	input_asynch_success = false;
-	intput_asynch_party_id = input_of_pid;
-	num_of_inputs = num_of_inputs_;
-
-	if(0 != push_task(spdz2_ext_processor_base::op_code_input_asynch))
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::start_input: failed pushing an input task to queue.");
-		return -1;
-	}
-	return 0;
-}
-
-//***********************************************************************************************//
-int spdz2_ext_processor_base::stop_input(size_t * input_count, u_int64_t ** inputs)
-{
-	if(!input_asynch_on)
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_input: asynch input is not started.");
-		return -1;
-	}
-	input_asynch_on = false;
-
-	int result = sem_wait(&input_asynch_done);
-	if(0 != result)
-	{
-		result = errno;
-		char errmsg[512];
-		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_input: sem_wait() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-		return -1;
-	}
-
-	if(input_asynch_success)
-	{
-		if(!input_values.empty())
-		{
-			*inputs = new u_int64_t[*input_count = input_values.size()];
-			memcpy(*inputs, &input_values[0], *input_count * sizeof(u_int64_t));
-		}
-		return 0;
-	}
-	else
-	{
-		return -1;
-	}
-}
-
-//***********************************************************************************************//
-void spdz2_ext_processor_base::exec_input_asynch()
-{
-	input_asynch_success = protocol_input_asynch();
-	sem_post(&input_asynch_done);
-}
-
 //***********************************************************************************************//
 
-int spdz2_ext_processor_base::start_mult(int count, const SPDZEXT_VALTYPE * factors_values, SPDZEXT_VALTYPE * prod_values, int verify)
-{
-	if(mult_on)
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::start_mult: mult is already started (a stop_mult() call is required).");
-		return -1;
-	}
-	mult_on = true;
-	mult_success = false;
-	mult_values.assign(factors_values, factors_values + count);
-	mult_dest = prod_values;
-	products.clear();
-
-	if(0 != push_task(spdz2_ext_processor_base::op_code_mult))
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::start_mult: failed pushing a mult task to queue.");
-		return -1;
-	}
-	return 0;
-}
-
-
-//int spdz2_ext_processor_base::start_mult(const size_t share_count, const u_int64_t * shares, int verify)
-//{
-//	if(mult_on)
-//	{
-//		syslog(LOG_ERR, "spdz2_ext_processor_base::start_mult: mult is already started (a stop_mult() call is required).");
-//		return -1;
-//	}
-//	mult_on = true;
-//	mult_success = false;
-//	mult_values.assign(shares, shares + share_count);
-//	products.clear();
-//
-//	if(0 != push_task(spdz2_ext_processor_base::op_code_mult))
-//	{
-//		syslog(LOG_ERR, "spdz2_ext_processor_base::start_mult: failed pushing a mult task to queue.");
-//		return -1;
-//	}
-//	return 0;
-//}
-
-//***********************************************************************************************//
-
-int spdz2_ext_processor_base::stop_mult(const time_t timeout_sec)
-{
-	if(!mult_on)
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_mult: mult is not started.");
-		return -1;
-	}
-	mult_on = false;
-
-	struct timespec timeout;
-	clock_gettime(CLOCK_REALTIME, &timeout);
-	timeout.tv_sec += timeout_sec;
-
-	int result = sem_timedwait(&mult_done, &timeout);
-
-	if(0 != result)
-	{
-		result = errno;
-		char errmsg[512];
-		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_open: sem_timedwait() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-		return -1;
-	}
-
-	if(mult_success)
-	{
-
-		if(!products.empty())
-		{
-			memcpy(mult_dest, &products[0], (products.size())*sizeof(SPDZEXT_VALTYPE));
-			products.clear();
-		}
-		return 0;
-	}
-	else
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_mult: mult failed.");
-		return -1;
-	}
-}
-
-
-//int spdz2_ext_processor_base::stop_mult(size_t * product_count, u_int64_t ** product_values)
-//{
-//	if(!mult_on)
-//	{
-//		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_mult: mult is not started.");
-//		return -1;
-//	}
-//	mult_on = false;
-//
-//	int result = sem_wait(&mult_done);
-//	if(0 != result)
-//	{
-//		result = errno;
-//		char errmsg[512];
-//		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_mult: sem_wait() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-//		return -1;
-//	}
-//
-//	if(mult_success)
-//	{
-//		if(!products.empty())
-//		{
-//			*product_values = new u_int64_t[*product_count = products.size()];
-//			memcpy(*product_values, &products[0], *product_count * sizeof(u_int64_t));
-//		}
-//		return 0;
-//	}
-//	else
-//	{
-//		return -1;
-//	}
-//}
-
-//***********************************************************************************************//
-void spdz2_ext_processor_base::exec_mult()
-{
-	mult_success = protocol_mult();
-	sem_post(&mult_done);
-}
-
-//***********************************************************************************************//
-int spdz2_ext_processor_base::start_share_immediates(const int input_of_pid, const size_t value_count, const u_int64_t * values)
-{
-	if(share_immediates_on)
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::start_share_immediates: share_immediates is already started (a stop_share_immediates() call is required).");
-		return -1;
-	}
-	share_immediates_on = true;
-	share_immediates_success = false;
-	immediates_values.assign(values, values + value_count);
-	immediates_shares.clear();
-
-	if(0 != push_task(spdz2_ext_processor_base::op_code_share_immediates))
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::start_share_immediates: failed pushing a share_immediates task to queue.");
-		return -1;
-	}
-	return 0;
-}
-
-//***********************************************************************************************//
-int spdz2_ext_processor_base::stop_share_immediates(size_t * share_count, u_int64_t ** shares, const time_t timeout_sec)
-{
-	if(!share_immediates_on)
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_share_immediates: share_immediates is not started.");
-		return -1;
-	}
-	share_immediates_on = false;
-
-	struct timespec timeout;
-	clock_gettime(CLOCK_REALTIME, &timeout);
-	timeout.tv_sec += timeout_sec;
-
-	int result = sem_timedwait(&share_immediates_done, &timeout);
-	if(0 != result)
-	{
-		result = errno;
-		char errmsg[512];
-		syslog(LOG_ERR, "spdz2_ext_processor_base::stop_share_immediates: sem_wait() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-		return -1;
-	}
-
-	if(share_immediates_success)
-	{
-		if(!immediates_shares.empty())
-		{
-			*shares = new u_int64_t[*share_count = immediates_shares.size()];
-			memcpy(*shares, &immediates_shares[0], *share_count * sizeof(u_int64_t));
-		}
-		return 0;
-	}
-	else
-	{
-		return -1;
-	}
-}
-
-//***********************************************************************************************//
-void spdz2_ext_processor_base::exec_share_immediates()
-{
-	share_immediates_success = protocol_share_immediates();
-	sem_post(&share_immediates_done);
-}
-
-//***********************************************************************************************//
-int spdz2_ext_processor_base::share_immediate(const u_int64_t value, u_int64_t * share, const time_t timeout_sec)
-{
-	p_immediate_share = share;
-	immediate_value.clear();
-	immediate_value.push_back(value);
-	share_immediate_success = false;
-
-	if(0 != push_task(spdz2_ext_processor_base::op_code_share_immediate))
-	{
-		syslog(LOG_ERR, "spdz2_ext_processor_base::share_immediate: failed pushing a share_immediate task to queue.");
-		return -1;
-	}
-
-	struct timespec timeout;
-	clock_gettime(CLOCK_REALTIME, &timeout);
-	timeout.tv_sec += timeout_sec;
-
-	int result = sem_timedwait(&share_immediate_done, &timeout);
-	if(0 != result)
-	{
-		result = errno;
-		char errmsg[512];
-		syslog(LOG_ERR, "spdz2_ext_processor_base::share_immediate: sem_wait() failed with error %d : %s", result, strerror_r(result, errmsg, 512));
-		return -1;
-	}
-
-	p_immediate_share = NULL;
-	immediate_value.clear();
-
-	return (share_immediate_success)? 0: -1;
-
-}
-
-//***********************************************************************************************//
-void spdz2_ext_processor_base::exec_share_immediate()
-{
-	share_immediate_success = protocol_share_immediate();
-	sem_post(&share_immediate_done);
-}
-
-//***********************************************************************************************//
