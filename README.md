@@ -7,7 +7,7 @@ See License.txt
 
 ### SPDZ-2 With Extensions
 
-[SPDZ-2 With Extensions for Ring](https://github.com/nec-mpc/SPDZ-2) is a fork of the University Of Bristol SPDZ-2 Repository, with changes to support extending the SPDZ-2 Framework to run additional protocols. Changes performed by Bar Ilan Cryptography Research Group and NEC Security Research Labs. This code is used in the publication "Generalizing the SPDZ Compiler For Other Protocols" accpeted for ACM-CCS 2018. A link to the eprint is https://eprint.iacr.org/2018/762
+[SPDZ-2 With Extensions for Ring Supporting a Floating-point Operation](https://github.com/nec-mpc/SPDZ-2-Float) is a fork of the University Of Bristol SPDZ-2 Repository, with changes to support extending the SPDZ-2 Framework to run additional protocols. Changes performed by Bar Ilan Cryptography Research Group and NEC Security Research Labs.
 
 ### Set environment variables
 - Set full path for extension library to the environment variable `SPDZ_EXT_LIB`.
